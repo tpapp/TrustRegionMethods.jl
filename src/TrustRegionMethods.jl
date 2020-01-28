@@ -1,9 +1,11 @@
 module TrustRegionMethods
 
-export trust_region_solver, TrustRegionResult
+export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper
 
 using ArgCheck: @argcheck
+import DiffResults
 using DocStringExtensions: SIGNATURES, TYPEDEF
+import ForwardDiff
 using LinearAlgebra: dot, norm
 using UnPack: @unpack
 
@@ -224,6 +226,70 @@ function trust_region_solver(f, x;
             return TrustRegionResult(Δ, x, fx, residual_norm, converged, iterations)
         end
     end
+end
+
+####
+#### AD shims
+####
+
+###
+### ForwardDiff
+###
+
+"""
+$(TYPEDEF)
+
+
+"""
+struct ForwardDiffBuffer{TF,TR,TC}
+    "A function that maps vectors to residual vectors."
+    f::TF
+    "`DiffResults` buffer for Jacobians."
+    result::TR
+    "Gradient configuration."
+    cfg::TC
+end
+
+"""
+$(SIGNATURES)
+
+Wrap an ``ℝⁿ`` function `f` in a callable that can be used in [`trust_region_solver`](@ref)
+directly. Remaining parameters are passed on to `ForwardDiff.JacobianConfig`, and can be
+used to set eg chunk size.
+
+```jldoctest
+julia> f(x) = [1.0 2; 3 4] * x - ones(2)
+f (generic function with 1 method)
+
+julia> ff = ForwardDiff_wrapper(f, 2)
+AD wrapper via ForwardDiff for ℝⁿ→ℝⁿ function, n = 2
+
+julia> ff(ones(2))
+(r = [2.0, 6.0], J = [1.0 2.0; 3.0 4.0])
+
+julia> trust_region_solver(ff, [100.0, 100.0])
+Nonlinear solver using trust region method converged after 9 steps
+  with ‖x‖₂ = 3.97e-15, Δ = 128.0
+  x = [-1.0, 1.0]
+  r = [-1.78e-15, 3.55e-15]
+```
+"""
+function ForwardDiff_wrapper(f, n, jacobian_config...)
+    x = zeros(n)
+    result = DiffResults.JacobianResult(x)
+    cfg = ForwardDiff.JacobianConfig(f, x, jacobian_config...)
+    ForwardDiffBuffer(f, result, cfg)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", fdb::ForwardDiffBuffer)
+    n = length(DiffResults.value(fdb.result))
+    print(io, "AD wrapper via ForwardDiff for ℝⁿ→ℝⁿ function, n = $(n)")
+end
+
+function (fdb::ForwardDiffBuffer)(x)
+    @unpack f, result, cfg = fdb
+    ForwardDiff.jacobian!(result, f, x, cfg)
+    (r = copy(DiffResults.value(result)), J = copy(DiffResults.jacobian(result)))
 end
 
 end # module

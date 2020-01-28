@@ -1,6 +1,6 @@
 module TrustRegionMethods
 
-export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper
+export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper, SolverStoppingCriterion
 
 using ArgCheck: @argcheck
 import DiffResults
@@ -194,19 +194,19 @@ function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
     end
 end
 
-struct NonlinearStoppingCriterion{T <: Real}
+struct SolverStoppingCriterion{T <: Real}
     residual_norm_tolerance::T
-    function NonlinearStoppingCriterion(residual_norm_tolerance::T) where {T}
+    function SolverStoppingCriterion(residual_norm_tolerance::T) where {T}
         @argcheck residual_norm_tolerance > 0
         new{T}(residual_norm_tolerance)
     end
 end
 
-function NonlinearStoppingCriterion(; residual_norm_tolerance = √eps())
-    NonlinearStoppingCriterion(residual_norm_tolerance)
+function SolverStoppingCriterion(; residual_norm_tolerance = √eps())
+    SolverStoppingCriterion(residual_norm_tolerance)
 end
 
-function check_stopping_criterion(nsc::NonlinearStoppingCriterion, fx)
+function check_stopping_criterion(nsc::SolverStoppingCriterion, fx)
     r_norm = norm(fx.residual, 2)
     converged = r_norm ≤ nsc.residual_norm_tolerance
     converged, (converged = converged , residual_norm = r_norm)
@@ -273,7 +273,7 @@ Returns a [`TrustRegionResult`](@ref) object.
 """
 function trust_region_solver(f, x;
                              parameters = TrustRegionParameters(),
-                             stopping_criterion = NonlinearStoppingCriterion(),
+                             stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
                              Δ = 1.0)
     fx = f(x)

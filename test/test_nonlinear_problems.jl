@@ -75,7 +75,28 @@ function (::PowellSingular)(x)
     [x1 + 10 * x2, √5 * (x3 - x4), abs2(x2 - 2 * x3), √10 * abs2(x1 - x4)]
 end
 
-TEST_FUNCTIONS = [F_NWp281(), Rosenbrock(), PowellSingular()]
+###
+### Powell badly scaled function
+###
+
+struct PowellBadlyScaled end
+
+dimension(::PowellBadlyScaled) = 2
+
+root(::PowellBadlyScaled) = [1.0981593296999222e-5, 9.106146739865656]
+
+start(::PowellBadlyScaled) = Float64[0, 1]
+
+function (::PowellBadlyScaled)(x)
+    x1, x2 = x
+    [1e4 * x1 * x2 - 1, exp(-x1) + exp(-x2) - 1.0001]
+end
+
+####
+#### run tests
+####
+
+TEST_FUNCTIONS = [F_NWp281(), Rosenbrock(), PowellSingular(), PowellBadlyScaled()]
 
 @testset "basic consistency checks for test functions." begin
     for f in TEST_FUNCTIONS

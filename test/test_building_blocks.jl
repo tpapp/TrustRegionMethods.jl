@@ -75,3 +75,10 @@ end
         @test m_obj(pD) ≤ m_obj(pC) # improve on Cauchy point
     end
 end
+
+@testset "printing" begin       # just test that printing is defined
+    ff = ForwardDiff_wrapper(x -> Diagonal(ones(2)) * x, 2)
+    @test repr(ff) isa AbstractString
+    res = trust_region_solver(ff, ones(2))
+    @test repr(res) isa AbstractString
+end

@@ -1,0 +1,229 @@
+module TrustRegionMethods
+
+export trust_region_solver, TrustRegionResult
+
+using ArgCheck: @argcheck
+using DocStringExtensions: SIGNATURES, TYPEDEF
+using LinearAlgebra: dot, norm
+using UnPack: @unpack
+
+####
+#### building blocks
+####
+
+"""
+$(TYPEDEF)
+
+A *linear model* for system of nonlinear equations, relative to the origin, as
+
+```math
+m(p) = p' J' r + 1/2 p' J' J p
+```
+
+approximating some `f(x) = \\| r(x) \\|^2_2` as
+
+```math
+1/2 \\| f(x + p) \\|_2^2 \approx 1/2 \\| r + J p \\|_2^2 = \\| r \\|_2^2 + p'J'r + 1/2 p' J' J p
+```
+"""
+struct NonlinearModel{TR,TJ}
+    r::TR
+    J::TJ
+end
+
+"""
+$(SIGNATURES)
+
+Find the Cauchy point (the minimum of the linear part, subject to ``\\| p \\| ≤ Δ``) of the problem.
+
+Return three values:
+
+1. the Cauchy point vector `pC`,
+
+2. the (Euclidean) *norm* of `pC`
+
+3. a boolean indicating whether the constraint was binding.
+"""
+function cauchy_point(Δ::Real, model::NonlinearModel)
+    @unpack r, J = model
+    g = J' * r
+    q = g' * (J' * J) * g
+    g_norm = norm(g, 2)
+    τ = if q ≤ 0              # practically 0 (semi-definite form) but allow for float error
+        one(q)
+    else
+        min(one(q), g_norm^3 / (Δ * q))
+    end
+    (-τ * Δ / g_norm) .* g, τ * Δ, τ ≥ 1
+end
+
+"""
+$(SIGNATURES)
+
+Finds `\tau` such that
+
+```math
+\\| p_C + τ D \\|_2 = Δ
+```
+
+`pC_norm` is `\\| p_C \\|_2^2`, and can be provided when available.
+
+Caller guarantees that
+
+1. `pC_norm ≤ Δ`,
+
+2. `norm(pC + D, 2) ≥ Δ`.
+
+3. `dot(pC, D) ≥ 0`.
+
+These ensure a meaningful solution `0 ≤ τ ≤ 1`. None of them are checked explicitly.
+"""
+function dogleg_boundary(Δ, D, pC, pC_norm = norm(pC, 2))
+    a = sum(abs2, D)
+    b = 2 * dot(D, pC)
+    c = abs2(pC_norm) - abs2(Δ)
+    (-b + √(abs2(b) - 4 * a * c)) / (2 * a)
+end
+
+"""
+$(SIGNATURES)
+
+Implementation of the *dogleg method*. Return the minimizer and a boolean indicating if the
+constraint is binding.
+"""
+function dogleg(Δ, model::NonlinearModel)
+    @unpack r, J = model
+    pU = -(J \ r)               # unconstrained step
+    pU_norm = norm(pU, 2)
+    if pU_norm ≤ Δ
+        pU, false
+    else
+        pC, pC_norm, on_boundary = cauchy_point(Δ, model)
+        if on_boundary
+            pC, true
+        else
+            D = pU .- pC
+            τ = dogleg_boundary(Δ, D, pC, pC_norm)
+            pC .+ D .* τ, true
+        end
+    end
+end
+
+####
+#### trust region steps
+####
+
+struct TrustRegionParameters{T}
+    η::T
+    Δ̄::T
+    function TrustRegionParameters(η::T, Δ̄::T) where {T <: Real}
+        @argcheck 0 < η < 0.25
+        @argcheck Δ̄ > 0
+        new{T}(η, Δ̄)
+    end
+end
+
+TrustRegionParameters(η, Δ̄) = TrustRegionParameterS(promote(η, Δ̄)...)
+
+TrustRegionParameters(; η = 0.125, Δ̄ = Inf) = TrustRegionParameters(η, Δ̄)
+
+"""
+$(SIGNATURES)
+
+Ratio between predicted (using `model`, at `p`) and actual reduction (taken from the
+residual value `r′`). Will return an arbitrary negative number for infeasible coordinates.
+"""
+reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
+
+function reduction_ratio(model::NonlinearModel, p, r′)
+    @unpack r, J = model
+    @argcheck all(isfinite, r) && all(isfinite, J) "residual or Jacobian are not finite"
+    r2 = sum(abs2, r)
+    (r2 - sum(abs2, r′)) / (r2 - sum(abs2, r .+ J * p))
+end
+
+function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
+    @unpack η, Δ̄ = parameters
+    model = NonlinearModel(fx.r, fx.J)
+    p, on_boundary = dogleg(Δ, model)
+    x′ = x .+ p
+    fx′ = f(x′)
+    ρ = reduction_ratio(model, p, fx′.r)
+    Δ′ =
+        if ρ < 0.25
+            norm(p, 2) / 4
+        elseif ρ > 0.75 && on_boundary
+            min(2 * Δ, Δ̄)
+        else
+            Δ
+        end
+    if ρ ≥ η
+        Δ′, x′, fx′            # reasonable reduction, use new position
+    else
+        Δ′, x, fx              # very small reduction, try again from original
+    end
+end
+
+struct NonlinearStoppingCriterion{T <: Real}
+    residual_norm_tolerance::T
+    function NonlinearStoppingCriterion(residual_norm_tolerance::T) where {T}
+        @argcheck residual_norm_tolerance > 0
+        new{T}(residual_norm_tolerance)
+    end
+end
+
+function NonlinearStoppingCriterion(; residual_norm_tolerance = √eps())
+    NonlinearStoppingCriterion(residual_norm_tolerance)
+end
+
+function check_stopping_criterion(nsc::NonlinearStoppingCriterion, fx)
+    r_norm = norm(fx.r, 2)
+    converged = r_norm ≤ nsc.residual_norm_tolerance
+    converged, (converged = converged , residual_norm = r_norm)
+end
+
+struct TrustRegionResult{T,TX,TFX}
+    Δ::T
+    x::TX
+    fx::TFX
+    residual_norm::T
+    converged::Bool
+    iterations::Int
+end
+
+function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
+    @unpack Δ, x, fx, residual_norm, converged, iterations = trr
+    _sig(x) = round(x; sigdigits = 3)
+    print(io, "Nonlinear solver using trust region method ")
+    if converged
+        printstyled(io, "converged"; color = :green)
+    else
+        printstyled(io, "didn't converge"; color = :red)
+    end
+    println(io, " after $(iterations) steps")
+    print(io, "  with ")
+    printstyled(io, "‖x‖₂ = $(_sig(residual_norm)), Δ = $(_sig(Δ))\n"; color = :blue)
+    println(io, "  x = ", _sig.(x))
+    println(io, "  r = ", _sig.(fx.r))
+end
+
+function trust_region_solver(f, x;
+                             parameters = TrustRegionParameters(),
+                             stopping_criterion = NonlinearStoppingCriterion(),
+                             maximum_iterations = 500,
+                             Δ = 1.0)
+    fx = f(x)
+    iterations = 1
+    while true
+        Δ, x, fx = trust_region_step(parameters, f, Δ, x, fx)
+        iterations += 1
+        do_stop, convergence_statistics = check_stopping_criterion(stopping_criterion, fx)
+        reached_max_iter = iterations ≥ maximum_iterations
+        if do_stop || reached_max_iter
+            @unpack converged, residual_norm = convergence_statistics
+            return TrustRegionResult(Δ, x, fx, residual_norm, converged, iterations)
+        end
+    end
+end
+
+end # module

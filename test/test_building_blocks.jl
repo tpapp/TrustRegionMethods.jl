@@ -12,6 +12,17 @@ function model_objective(model::NonlinearModel)
     end
 end
 
+@testset "Nonlinear model constructor sanity checks" begin
+    r = ones(2)
+    J = ones(2, 2)
+    @test_throws ArgumentError NonlinearModel(fill(Inf, 2), J)
+    @test_throws ArgumentError NonlinearModel(fill(NaN, 2), J)
+    @test_throws ArgumentError NonlinearModel(r, fill(-Inf, 2, 2))
+    @test_throws ArgumentError NonlinearModel(r, fill(NaN, 2, 2))
+    @test_throws ArgumentError NonlinearModel(r, ones(2, 3))
+    @test_throws ArgumentError NonlinearModel(r, ones(3, 3))
+end
+
 @testset "Cauchy point" begin
     for _ in 1:100
         # random parameters

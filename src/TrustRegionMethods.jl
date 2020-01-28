@@ -31,6 +31,13 @@ approximating some `f(x) = \\| r(x) \\|^2_2` as
 struct NonlinearModel{TR,TJ}
     r::TR
     J::TJ
+    function NonlinearModel(r::TR, J::TJ) where {TR,TJ}
+        @argcheck all(isfinite, r) "Non-finite residuals $(r)."
+        @argcheck all(isfinite, J) "Non-finite residuals $(J)."
+        n = length(r)
+        @argcheck size(J) ≡ (n, n) "Non-conformable residual and Jacobian."
+        new{TR,TJ}(r, J)
+    end
 end
 
 """

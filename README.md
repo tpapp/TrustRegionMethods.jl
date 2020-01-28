@@ -19,7 +19,7 @@ Experimental Julia package for trust region methods, with an emphasis on
 
 4. *Support for bailing out*: some inputs just may not be possible or worthwhile to evaluated for very complicated functions (eg economic models). You can signal this by returning `nothing`.
 
-# Example
+## Example
 
 ```julia
 julia> using TrustRegionMethods
@@ -40,8 +40,8 @@ Nonlinear solver using trust region method converged after 9 steps
   r = [-1.78e-15, 3.55e-15]
 ```
 
-# Related packages
+## Related packages
 
-This package is very experimental --- the interface will be evolving without prior warning or deprecation. You may want to consider the packages below instead.
+This package is very experimental — the interface will be evolving without prior warning or deprecation. You may want to consider the packages below instead.
 
 - [NLsolve.jl](https://github.com/JuliaNLSolvers/NLsolve.jl) is much more mature, but written with a lot of emphasis on using pre-allocated buffers.

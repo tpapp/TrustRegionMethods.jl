@@ -4,7 +4,7 @@ export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper
 
 using ArgCheck: @argcheck
 import DiffResults
-using DocStringExtensions: SIGNATURES, TYPEDEF
+using DocStringExtensions: FIELDS, SIGNATURES, TYPEDEF
 import ForwardDiff
 using LinearAlgebra: dot, norm
 using UnPack: @unpack
@@ -146,11 +146,11 @@ end
 
 function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
-    model = NonlinearModel(fx.r, fx.J)
+    model = NonlinearModel(fx.residual, fx.Jacobian)
     p, on_boundary = dogleg(Δ, model)
     x′ = x .+ p
     fx′ = f(x′)
-    ρ = reduction_ratio(model, p, fx′.r)
+    ρ = reduction_ratio(model, p, fx′.residual)
     Δ′ =
         if ρ < 0.25
             norm(p, 2) / 4
@@ -179,17 +179,30 @@ function NonlinearStoppingCriterion(; residual_norm_tolerance = √eps())
 end
 
 function check_stopping_criterion(nsc::NonlinearStoppingCriterion, fx)
-    r_norm = norm(fx.r, 2)
+    r_norm = norm(fx.residual, 2)
     converged = r_norm ≤ nsc.residual_norm_tolerance
     converged, (converged = converged , residual_norm = r_norm)
 end
 
+"""
+$(TYPEDEF)
+
+# Fields
+
+$(FIELDS)
+"""
 struct TrustRegionResult{T,TX,TFX}
+    "The final trust region radius."
     Δ::T
+    "The last value (the root only when converged)."
     x::TX
+    "`f(x)` at the last `x`."
     fx::TFX
+    "The Euclidean norm of the residual at `x`."
     residual_norm::T
+    "A boolean indicating convergence."
     converged::Bool
+    "Number of iterations (≈ number of function evaluations)."
     iterations::Int
 end
 
@@ -206,9 +219,30 @@ function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
     print(io, "  with ")
     printstyled(io, "‖x‖₂ = $(_sig(residual_norm)), Δ = $(_sig(Δ))\n"; color = :blue)
     println(io, "  x = ", _sig.(x))
-    println(io, "  r = ", _sig.(fx.r))
+    println(io, "  r = ", _sig.(fx.residual))
 end
 
+"""
+$(SIGNATURES)
+
+Solve `f ≈ 0` using trust region methods, starting from `x`.
+
+`f` is a callable (function) that
+
+1. takes vectors real numbers of the same length as `x`,
+
+2. returns a *either*
+
+    a. `nothing`, if the objective cannot be evaluated,
+
+    b. a value with properties `residual` and `Jacobian`, containing a vector and a
+    conformable matrix, with finite values. A `NamedTuple` can be used for this, but any
+    structure with these properties will be accepted. Importantly, this is treated as a
+    single object and can be used to return extra information (a “payload”), which will be
+    ignored by this function.
+
+Returns a [`TrustRegionResult`](@ref) object.
+"""
 function trust_region_solver(f, x;
                              parameters = TrustRegionParameters(),
                              stopping_criterion = NonlinearStoppingCriterion(),
@@ -239,7 +273,8 @@ end
 """
 $(TYPEDEF)
 
-
+A buffer for wrapping a (nonlinear) mapping `f` to calculate the Jacobian with
+`ForwardDiff.jacobian`.
 """
 struct ForwardDiffBuffer{TF,TR,TC}
     "A function that maps vectors to residual vectors."
@@ -289,7 +324,8 @@ end
 function (fdb::ForwardDiffBuffer)(x)
     @unpack f, result, cfg = fdb
     ForwardDiff.jacobian!(result, f, x, cfg)
-    (r = copy(DiffResults.value(result)), J = copy(DiffResults.jacobian(result)))
+    (residual = copy(DiffResults.value(result)),
+     Jacobian = copy(DiffResults.jacobian(result)))
 end
 
 end # module

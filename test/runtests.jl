@@ -9,11 +9,11 @@ include("test_building_blocks.jl")
         J = randn(n, n)
         x0 = randn(n)
         b = J * x0
-        res = trust_region_solver(x -> (r = J * x .- b, J = J), x0 .* 1000)
+        res = trust_region_solver(x -> (residual = J * x .- b, Jacobian = J), x0 .* 1000)
         @test res.x ≈ x0 atol = √eps() * n
-        @test norm(res.fx.r, 2) ≈ 0 atol = √eps()
-        @test norm(res.fx.r, 2) == res.residual_norm
-        @test res.fx.J == J
+        @test norm(res.fx.residual, 2) ≈ 0 atol = √eps()
+        @test norm(res.fx.residual, 2) == res.residual_norm
+        @test res.fx.Jacobian == J
         @test res.converged == true
         display(res)
     end

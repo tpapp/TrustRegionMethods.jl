@@ -6,7 +6,7 @@ using ArgCheck: @argcheck
 import DiffResults
 using DocStringExtensions: FIELDS, SIGNATURES, TYPEDEF
 import ForwardDiff
-using LinearAlgebra: dot, norm
+using LinearAlgebra: Diagonal, dot, norm, svd
 using UnPack: @unpack
 
 ####
@@ -97,12 +97,33 @@ end
 """
 $(SIGNATURES)
 
+Calculate the unconstrained optimum of the model.
+
+`Δ` is used in a heuristic to deal with near-singularities: very small singular values in
+the SVD of the Jacobian are inverted to be a large, but finite multiple of `Δ`. This
+effectively results in using a matrix close, but not identical, to the Moore-Penrose
+inverse.
+
+The motivation is that for singularities like this, we just deviate from the Cauchy line a
+bit to do something meaningful so that we can proceed.
+"""
+function unconstrained_optimum(Δ, model::NonlinearModel)
+    @unpack r, J = model
+    @unpack U, S, Vt = svd(J)
+    s_min = eps()               # these could be tweaked …
+    s_max = Δ * 100             # … but probably do not matter
+    minus_Sinv = map(s -> -(s ≤ s_min ? oftype(s, s_max) : 1 / s), S)
+    Vt' * (Diagonal(minus_Sinv) * (U' * r))
+end
+
+"""
+$(SIGNATURES)
+
 Implementation of the *dogleg method*. Return the minimizer and a boolean indicating if the
 constraint is binding.
 """
 function dogleg(Δ, model::NonlinearModel)
-    @unpack r, J = model
-    pU = -(J \ r)               # unconstrained step
+    pU = unconstrained_optimum(Δ, model)
     pU_norm = norm(pU, 2)
     if pU_norm ≤ Δ
         pU, false

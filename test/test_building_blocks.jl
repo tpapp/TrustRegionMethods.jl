@@ -78,9 +78,10 @@ end
 
 @testset "singularities" begin
     singular_model = NonlinearModel(ones(2), ones(2, 2))
-    pC, pC_norm, on_boundary = cauchy_point(1.0, singular_model)
+    pC, pC_norm, _ = cauchy_point(1.0, singular_model)
     @test all(isfinite, pC) && isfinite(pC_norm)
-    @test_broken dogleg(1.0, singular_model)
+    p, _ = dogleg(1.0, singular_model)
+    @test all(isfinite, p)
 end
 
 @testset "printing" begin       # just test that printing is defined

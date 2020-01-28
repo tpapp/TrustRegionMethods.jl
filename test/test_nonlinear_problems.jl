@@ -44,7 +44,7 @@ end
 ### Rosenbrock
 ###
 
-"Rosenbrock function."
+"Rosenbrock function. (1) from Moré et al (1981)."
 struct Rosenbrock end
 
 dimension(::Rosenbrock) = 2
@@ -62,6 +62,7 @@ end
 ### Powell singular function
 ###
 
+"Powell singular function. (13) from Moré et al (1981)."
 struct PowellSingular end
 
 dimension(::PowellSingular) = 4
@@ -79,6 +80,7 @@ end
 ### Powell badly scaled function
 ###
 
+"Powell's badly scaled function. (3) from Moré et al (1981)."
 struct PowellBadlyScaled end
 
 dimension(::PowellBadlyScaled) = 2
@@ -92,11 +94,32 @@ function (::PowellBadlyScaled)(x)
     [1e4 * x1 * x2 - 1, exp(-x1) + exp(-x2) - 1.0001]
 end
 
+###
+### Helical valley function
+###
+
+"Helical valley function. (7) from Moré et al (1981)."
+struct HelicalValley end
+
+dimension(::HelicalValley) = 3
+
+root(::HelicalValley) = Float64[1, 0, 0]
+
+start(::HelicalValley) = Float64[-1, 0, 0]
+
+function (::HelicalValley)(x)
+    x1, x2, x3 = x
+    θ = 1/(2π) * atan(x1 > 0 ? x2 / x1 : x1 / x2)
+    [10*(x3 - 10 * θ), 10 * (hypot(x1, x2) - 1), x3]
+end
+
+
 ####
 #### run tests
 ####
 
-TEST_FUNCTIONS = [F_NWp281(), Rosenbrock(), PowellSingular(), PowellBadlyScaled()]
+TEST_FUNCTIONS = [F_NWp281(), Rosenbrock(), PowellSingular(), PowellBadlyScaled(),
+                  HelicalValley()]
 
 @testset "basic consistency checks for test functions." begin
     for f in TEST_FUNCTIONS

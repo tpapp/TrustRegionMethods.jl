@@ -2,7 +2,8 @@
 ##### unit tests for building blocks
 #####
 
-using TrustRegionMethods: NonlinearModel, cauchy_point, dogleg_boundary, dogleg
+using TrustRegionMethods: NonlinearModel, cauchy_point, dogleg_boundary, dogleg,
+    unconstrained_optimum
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::NonlinearModel)
@@ -68,6 +69,8 @@ end
         n = rand(2:10)
         model = NonlinearModel(rand(n), rand(n, n))
         Δ = abs(randn())
+        pU, pU_norm = @inferred unconstrained_optimum(model)
+        @test pU_norm ≥ 0
         pC, _, _ = cauchy_point(Δ, model)
         pD, on_boundary = @inferred dogleg(Δ, model)
         @test (norm(pD, 2) ≈ Δ) == on_boundary # report boundary correctly

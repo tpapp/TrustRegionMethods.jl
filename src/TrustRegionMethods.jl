@@ -6,7 +6,7 @@ using ArgCheck: @argcheck
 import DiffResults
 using DocStringExtensions: FIELDS, SIGNATURES, TYPEDEF
 import ForwardDiff
-using LinearAlgebra: Diagonal, dot, norm, svd
+using LinearAlgebra: dot, issuccess, lu, norm
 using UnPack: @unpack
 
 ####
@@ -97,23 +97,21 @@ end
 """
 $(SIGNATURES)
 
-Calculate the unconstrained optimum of the model.
+Calculate the unconstrained optimum of the model, return its norm as the second value.
 
-`Δ` is used in a heuristic to deal with near-singularities: very small singular values in
-the SVD of the Jacobian are inverted to be a large, but finite multiple of `Δ`. This
-effectively results in using a matrix close, but not identical, to the Moore-Penrose
-inverse.
-
-The motivation is that for singularities like this, we just deviate from the Cauchy line a
-bit to do something meaningful so that we can proceed.
+When the second value is *infinite*, the unconstrained optimum should not be used as this
+indicates a singular problem.
 """
-function unconstrained_optimum(Δ, model::NonlinearModel)
+function unconstrained_optimum(model::NonlinearModel)
     @unpack r, J = model
-    @unpack U, S, Vt = svd(J)
-    s_min = eps()               # these could be tweaked …
-    s_max = Δ * 100             # … but probably do not matter
-    minus_Sinv = map(s -> -(s ≤ s_min ? oftype(s, s_max) : 1 / s), S)
-    Vt' * (Diagonal(minus_Sinv) * (U' * r))
+    LU = lu(J; check = false)
+    if issuccess(LU)
+        pU = -(LU \ r)
+        pU, norm(pU, 2)
+    else
+        ∞ = convert(eltype(LU), Inf)
+        fill(∞, length(r)), ∞
+    end
 end
 
 """
@@ -123,13 +121,12 @@ Implementation of the *dogleg method*. Return the minimizer and a boolean indica
 constraint is binding.
 """
 function dogleg(Δ, model::NonlinearModel)
-    pU = unconstrained_optimum(Δ, model)
-    pU_norm = norm(pU, 2)
+    pU, pU_norm = unconstrained_optimum(model)
     if pU_norm ≤ Δ
         pU, false
     else
         pC, pC_norm, on_boundary = cauchy_point(Δ, model)
-        if on_boundary
+        if on_boundary || isinf(pU_norm)
             pC, true
         else
             D = pU .- pC

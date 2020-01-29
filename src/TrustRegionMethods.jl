@@ -6,7 +6,7 @@ using ArgCheck: @argcheck
 import DiffResults
 using DocStringExtensions: FIELDS, SIGNATURES, TYPEDEF
 import ForwardDiff
-using LinearAlgebra: Diagonal, dot, norm, svd
+using LinearAlgebra: dot, issuccess, lu, norm
 using UnPack: @unpack
 
 ####
@@ -28,10 +28,10 @@ approximating some `f(x) = \\| r(x) \\|^2_2` as
 1/2 \\| f(x + p) \\|_2^2 \approx 1/2 \\| r + J p \\|_2^2 = \\| r \\|_2^2 + p'J'r + 1/2 p' J' J p
 ```
 """
-struct NonlinearModel{TR,TJ}
+struct ResidualModel{TR,TJ}
     r::TR
     J::TJ
-    function NonlinearModel(r::TR, J::TJ) where {TR,TJ}
+    function ResidualModel(r::TR, J::TJ) where {TR,TJ}
         @argcheck all(isfinite, r) "Non-finite residuals $(r)."
         @argcheck all(isfinite, J) "Non-finite residuals $(J)."
         n = length(r)
@@ -53,7 +53,7 @@ Return three values:
 
 3. a boolean indicating whether the constraint was binding.
 """
-function cauchy_point(Δ::Real, model::NonlinearModel)
+function cauchy_point(Δ::Real, model::ResidualModel)
     @unpack r, J = model
     g = J' * r
     q = g' * (J' * J) * g
@@ -97,23 +97,21 @@ end
 """
 $(SIGNATURES)
 
-Calculate the unconstrained optimum of the model.
+Calculate the unconstrained optimum of the model, return its norm as the second value.
 
-`Δ` is used in a heuristic to deal with near-singularities: very small singular values in
-the SVD of the Jacobian are inverted to be a large, but finite multiple of `Δ`. This
-effectively results in using a matrix close, but not identical, to the Moore-Penrose
-inverse.
-
-The motivation is that for singularities like this, we just deviate from the Cauchy line a
-bit to do something meaningful so that we can proceed.
+When the second value is *infinite*, the unconstrained optimum should not be used as this
+indicates a singular problem.
 """
-function unconstrained_optimum(Δ, model::NonlinearModel)
+function unconstrained_optimum(model::ResidualModel)
     @unpack r, J = model
-    @unpack U, S, Vt = svd(J)
-    s_min = eps()               # these could be tweaked …
-    s_max = Δ * 100             # … but probably do not matter
-    minus_Sinv = map(s -> -(s ≤ s_min ? oftype(s, s_max) : 1 / s), S)
-    Vt' * (Diagonal(minus_Sinv) * (U' * r))
+    LU = lu(J; check = false)
+    if issuccess(LU)
+        pU = -(LU \ r)
+        pU, norm(pU, 2)
+    else
+        ∞ = convert(eltype(LU), Inf)
+        fill(∞, length(r)), ∞
+    end
 end
 
 """
@@ -122,14 +120,13 @@ $(SIGNATURES)
 Implementation of the *dogleg method*. Return the minimizer and a boolean indicating if the
 constraint is binding.
 """
-function dogleg(Δ, model::NonlinearModel)
-    pU = unconstrained_optimum(Δ, model)
-    pU_norm = norm(pU, 2)
+function dogleg(Δ, model::ResidualModel)
+    pU, pU_norm = unconstrained_optimum(model)
     if pU_norm ≤ Δ
         pU, false
     else
         pC, pC_norm, on_boundary = cauchy_point(Δ, model)
-        if on_boundary
+        if on_boundary || isinf(pU_norm)
             pC, true
         else
             D = pU .- pC
@@ -165,7 +162,7 @@ residual value `r′`). Will return an arbitrary negative number for infeasible 
 """
 reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
 
-function reduction_ratio(model::NonlinearModel, p, r′)
+function reduction_ratio(model::ResidualModel, p, r′)
     @unpack r, J = model
     @argcheck all(isfinite, r) && all(isfinite, J) "residual or Jacobian are not finite"
     r2 = sum(abs2, r)
@@ -174,7 +171,7 @@ end
 
 function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
-    model = NonlinearModel(fx.residual, fx.Jacobian)
+    model = ResidualModel(fx.residual, fx.Jacobian)
     p, on_boundary = dogleg(Δ, model)
     x′ = x .+ p
     fx′ = f(x′)

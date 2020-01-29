@@ -28,10 +28,10 @@ approximating some `f(x) = \\| r(x) \\|^2_2` as
 1/2 \\| f(x + p) \\|_2^2 \approx 1/2 \\| r + J p \\|_2^2 = \\| r \\|_2^2 + p'J'r + 1/2 p' J' J p
 ```
 """
-struct NonlinearModel{TR,TJ}
+struct ResidualModel{TR,TJ}
     r::TR
     J::TJ
-    function NonlinearModel(r::TR, J::TJ) where {TR,TJ}
+    function ResidualModel(r::TR, J::TJ) where {TR,TJ}
         @argcheck all(isfinite, r) "Non-finite residuals $(r)."
         @argcheck all(isfinite, J) "Non-finite residuals $(J)."
         n = length(r)
@@ -53,7 +53,7 @@ Return three values:
 
 3. a boolean indicating whether the constraint was binding.
 """
-function cauchy_point(Δ::Real, model::NonlinearModel)
+function cauchy_point(Δ::Real, model::ResidualModel)
     @unpack r, J = model
     g = J' * r
     q = g' * (J' * J) * g
@@ -102,7 +102,7 @@ Calculate the unconstrained optimum of the model, return its norm as the second 
 When the second value is *infinite*, the unconstrained optimum should not be used as this
 indicates a singular problem.
 """
-function unconstrained_optimum(model::NonlinearModel)
+function unconstrained_optimum(model::ResidualModel)
     @unpack r, J = model
     LU = lu(J; check = false)
     if issuccess(LU)
@@ -120,7 +120,7 @@ $(SIGNATURES)
 Implementation of the *dogleg method*. Return the minimizer and a boolean indicating if the
 constraint is binding.
 """
-function dogleg(Δ, model::NonlinearModel)
+function dogleg(Δ, model::ResidualModel)
     pU, pU_norm = unconstrained_optimum(model)
     if pU_norm ≤ Δ
         pU, false
@@ -162,7 +162,7 @@ residual value `r′`). Will return an arbitrary negative number for infeasible 
 """
 reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
 
-function reduction_ratio(model::NonlinearModel, p, r′)
+function reduction_ratio(model::ResidualModel, p, r′)
     @unpack r, J = model
     @argcheck all(isfinite, r) && all(isfinite, J) "residual or Jacobian are not finite"
     r2 = sum(abs2, r)
@@ -171,7 +171,7 @@ end
 
 function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
-    model = NonlinearModel(fx.residual, fx.Jacobian)
+    model = ResidualModel(fx.residual, fx.Jacobian)
     p, on_boundary = dogleg(Δ, model)
     x′ = x .+ p
     fx′ = f(x′)

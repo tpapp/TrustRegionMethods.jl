@@ -2,11 +2,11 @@
 ##### unit tests for building blocks
 #####
 
-using TrustRegionMethods: NonlinearModel, cauchy_point, dogleg_boundary, dogleg,
+using TrustRegionMethods: ResidualModel, cauchy_point, dogleg_boundary, dogleg,
     unconstrained_optimum
 
 "Return a closure that evaluates to the objective function of a model."
-function model_objective(model::NonlinearModel)
+function model_objective(model::ResidualModel)
     @unpack r, J = model
     function(p)
         p' * J' * r + 1/2 * p' * J' * J * p
@@ -16,12 +16,12 @@ end
 @testset "Nonlinear model constructor sanity checks" begin
     r = ones(2)
     J = ones(2, 2)
-    @test_throws ArgumentError NonlinearModel(fill(Inf, 2), J)
-    @test_throws ArgumentError NonlinearModel(fill(NaN, 2), J)
-    @test_throws ArgumentError NonlinearModel(r, fill(-Inf, 2, 2))
-    @test_throws ArgumentError NonlinearModel(r, fill(NaN, 2, 2))
-    @test_throws ArgumentError NonlinearModel(r, ones(2, 3))
-    @test_throws ArgumentError NonlinearModel(r, ones(3, 3))
+    @test_throws ArgumentError ResidualModel(fill(Inf, 2), J)
+    @test_throws ArgumentError ResidualModel(fill(NaN, 2), J)
+    @test_throws ArgumentError ResidualModel(r, fill(-Inf, 2, 2))
+    @test_throws ArgumentError ResidualModel(r, fill(NaN, 2, 2))
+    @test_throws ArgumentError ResidualModel(r, ones(2, 3))
+    @test_throws ArgumentError ResidualModel(r, ones(3, 3))
 end
 
 @testset "Cauchy point" begin
@@ -31,7 +31,7 @@ end
         r = randn(n)
         J = randn(n, n)
         Δ = abs(randn())
-        model = NonlinearModel(r, J)
+        model = ResidualModel(r, J)
         m_obj = model_objective(model)
 
         # brute force calculation
@@ -67,7 +67,7 @@ end
 @testset "dogleg" begin
     for _ in 1:100
         n = rand(2:10)
-        model = NonlinearModel(rand(n), rand(n, n))
+        model = ResidualModel(rand(n), rand(n, n))
         Δ = abs(randn())
         pU, pU_norm = @inferred unconstrained_optimum(model)
         @test pU_norm ≥ 0
@@ -80,7 +80,7 @@ end
 end
 
 @testset "singularities" begin
-    singular_model = NonlinearModel(ones(2), ones(2, 2))
+    singular_model = ResidualModel(ones(2), ones(2, 2))
     pC, pC_norm, _ = cauchy_point(1.0, singular_model)
     @test all(isfinite, pC) && isfinite(pC_norm)
     p, _ = dogleg(1.0, singular_model)

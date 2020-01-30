@@ -36,7 +36,7 @@ struct ResidualModel{TR,TJ}
     J::TJ
     function ResidualModel(r::TR, J::TJ) where {TR,TJ}
         @argcheck all(isfinite, r) "Non-finite residuals $(r)."
-        @argcheck all(isfinite, J) "Non-finite residuals $(J)."
+        @argcheck all(isfinite, J) "Non-finite Jacobian $(J)."
         n = length(r)
         @argcheck size(J) ≡ (n, n) "Non-conformable residual and Jacobian."
         new{TR,TJ}(r, J)

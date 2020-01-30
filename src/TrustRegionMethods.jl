@@ -242,7 +242,7 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
         x = real(z)
         ϵ = eps(T)
         @argcheck(imag(z) ≤ n*(√ϵ*abs(x) + ϵ^0.25),
-                  "Imaginary part in real number, please see comment and report an issue.")
+                  "Imaginary part in real number ($(z)), please see comment and report an issue.")
         T(x)
     end
     λ = _real(E.values[end])::T

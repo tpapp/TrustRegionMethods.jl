@@ -2,8 +2,8 @@
 ##### unit tests for building blocks
 #####
 
-using TrustRegionMethods: ResidualModel, cauchy_point, dogleg_boundary, solve_model,
-    unconstrained_optimum
+using TrustRegionMethods: ResidualModel, MinimizationModel, cauchy_point, dogleg_boundary,
+    ges_kernel, solve_model, unconstrained_optimum
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::ResidualModel)
@@ -71,7 +71,17 @@ end
     end
 end
 
-@testset "dogleg" begin
+@testset "eigensolver type stability" begin
+    # we test this separately because it makes it easier to debug type inference failures
+    n = 10
+    model = ResidualModel(rand(n), rand(n, n))
+    λ, gap, y1, y2 = @inferred ges_kernel(1.0, MinimizationModel(model), I)
+    @test λ isa Float64
+    @test gap::Float64 ≥ 0
+    @test y1 isa Vector{Float64} && y2 isa Vector{Float64}
+end
+
+@testset "trust region solver tests" begin
     for _ in 1:100
 
         # random problem

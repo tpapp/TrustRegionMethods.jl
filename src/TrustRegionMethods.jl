@@ -7,7 +7,8 @@ using ArgCheck: @argcheck
 import DiffResults
 using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF
 import ForwardDiff
-using LinearAlgebra: dot, eigen!, I, issuccess, lu, norm, Symmetric, UniformScaling
+using KrylovKit: eigsolve
+using LinearAlgebra: dot, I, issuccess, lu, norm, Symmetric, UniformScaling
 using UnPack: @unpack
 
 ####
@@ -198,14 +199,12 @@ end
 ####
 #### NOTE:
 ####
-#### - Notation mostly follows the paper.
+#### - notation mostly follows the paper
 ####
 #### - implementation has ellipsoidal norm in some parts, for future generalizations,
 ####   currently unused
 ####
 #### - “hard case” is not implemented yet, falls back to dogleg
-####
-#### - using the general eigensolver which is very wasteful (this is a proof of concept)
 
 """
 Generalized eigenvalue solver (Adachi et al 2017).
@@ -233,8 +232,9 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
     n = length(g)
     G = ((g * g') ./ abs2(Δ))
     M = [-A G; B -A]
-    E = eigen!(M)
-    T = promote_type(Float32, eltype(M)) # type acrobatics because eigen! is not type stable
+    λs, vs, info = eigsolve(M, 2, :LR)
+    @argcheck info.converged ≥ 2 "Eigensolver did not converge."
+    T = promote_type(Float64, eltype(M))
     function _real(z)
         # Squash imaginary part of quantities which are theoretically supposed to be real.
         # The heuristic below is meant to catch eigensolver failures which are not supposed
@@ -245,9 +245,9 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
                   "Imaginary part in real number ($(z)), please see comment and report an issue.")
         T(x)
     end
-    λ = _real(E.values[end])::T
-    gap = abs(λ - E.values[end - 1])::T
-    y = _real.(E.vectors[:, end])::Vector{T}
+    λ = _real(first(λs))::T
+    gap = abs(λ - λs[2])::T
+    y = _real.(first(vs))::Vector{T}
     y1 = y[1:n]
     y2 = y[(n + 1):end]
     λ, gap, y1, y2

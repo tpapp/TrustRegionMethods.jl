@@ -111,12 +111,20 @@ end
 end
 
 @testset "ForwardDiff wrapper" begin
-    r = 0:3
-    f(x) = x .+ r
-    ff = ForwardDiff_wrapper(f, 4)
-    J = Matrix(Diagonal(ones(4)))
-    for x ∈ (randn(4), zeros(Int, 4), range(1//5, 3//7; length = 4))
-        @test ff(x) == (residual = Float64.(x .+ r), Jacobian = J)
+    @testset "different input types" begin
+        r = 0:3
+        f(x) = x .+ r
+        ff = ForwardDiff_wrapper(f, 4)
+        J = Diagonal(ones(4))
+        for x ∈ (randn(4), zeros(Int, 4), range(1//5, 3//7; length = 4))
+            @test ff(x) == (residual = Float64.(x .+ r), Jacobian = J)
+        end
+    end
+
+    @testset "handle infeasible" begin
+        ff = ForwardDiff_wrapper(x -> all(x .> 0) ? x : x .+ NaN, 4)
+        @test ff(-ones(4)) ≡ nothing
+        @test ff(ones(4)) == (residual = ones(4), Jacobian = Diagonal(ones(4)))
     end
 end
 

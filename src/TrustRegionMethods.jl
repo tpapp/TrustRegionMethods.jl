@@ -468,6 +468,8 @@ Wrap an ``ℝⁿ`` function `f` in a callable that can be used in [`trust_region
 directly. Remaining parameters are passed on to `ForwardDiff.JacobianConfig`, and can be
 used to set eg chunk size.
 
+Non-finite residuals will be treated as infeasible (`nothing`).
+
 ```jldoctest
 julia> f(x) = [1.0 2; 3 4] * x - ones(2)
 f (generic function with 1 method)
@@ -501,8 +503,12 @@ function (fdb::ForwardDiffBuffer)(y)
     @unpack x, f, result, cfg = fdb
     # copy to our own buffer to work with types other than Float64
     ForwardDiff.jacobian!(result, f, copy!(x, y), cfg)
-    (residual = copy(DiffResults.value(result)),
-     Jacobian = copy(DiffResults.jacobian(result)))
+    residual = copy(DiffResults.value(result))
+    if all(isfinite, residual)
+        (residual = residual, Jacobian = copy(DiffResults.jacobian(result)))
+    else
+        nothing
+    end
 end
 
 end # module

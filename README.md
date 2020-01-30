@@ -50,4 +50,4 @@ This package is very experimental — the interface will be evolving without pri
 
 ## References
 
-See <CITATIONS.bib>.
+See [CITATIONS.bib](CITATIONS.bib).

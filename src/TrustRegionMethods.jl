@@ -221,11 +221,14 @@ Returns
 
 - `λ`, the largest eigenvalue,
 
-- the gap to the next eigenvalue
+- the gap to the next eigenvalue (see note below)
 
 - `y1` and `y2`, the two parts of the corresponding generalized eigenvalue,
 
 All values are real, methods are type stable.
+
+When theorerical assumptions are violated, `gap` will be non-finite and a debug statement is
+emitted. No other values should be used in this case.
 """
 function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
     @unpack g, A = model
@@ -235,22 +238,23 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
     λs, vs, info = eigsolve(M, 2, :LR)
     @argcheck info.converged ≥ 2 "Eigensolver did not converge."
     T = promote_type(Float64, eltype(M))
-    function _real(z)
-        # Squash imaginary part of quantities which are theoretically supposed to be real.
-        # The heuristic below is meant to catch eigensolver failures which are not supposed
-        # to happen in practice. These should be reported as bugs.
-        x = real(z)
-        ϵ = eps(T)
-        @argcheck(imag(z) ≤ n*(√ϵ*abs(x) + ϵ^0.25),
-                  "Imaginary part in real number ($(z)), please see comment and report an issue.")
-        T(x)
+    ϵ = √eps(T)
+    is_practically_real(z) = imag(z) ≤ n*(ϵ*abs(z) + ϵ)
+    λ1, λ2 = λs
+    v1 = first(vs)
+    if is_practically_real(λ1) && all(is_practically_real, v1)
+        λ = real(λ1)::T
+        gap = abs(λ - λ2)::T
+        y = real.(v1)::Vector{T}
+        y1 = y[1:n]
+        y2 = y[(n + 1):end]
+        λ, gap, y1, y2
+    else
+        @debug "rightmost eigenvalue not real" M λs vs
+        ∞ = T(Inf)
+        y∞ = fill(∞, n)
+        ∞, ∞, y∞, y∞
     end
-    λ = _real(first(λs))::T
-    gap = abs(λ - λs[2])::T
-    y = _real.(first(vs))::Vector{T}
-    y1 = y[1:n]
-    y2 = y[(n + 1):end]
-    λ, gap, y1, y2
 end
 
 """
@@ -269,7 +273,7 @@ function solve_model(::GeneralizedEigenSolver, Δ, model::ResidualModel)
         model′ = MinimizationModel(model)
         λ, gap, y1, y2 = ges_kernel(Δ, model′, B)
         τ = √(eps(typeof(λ)) / gap)
-        if norm(y1, 2) > τ
+        if isfinite(gap) && norm(y1, 2) > τ
             # “easy” case, we can generate a candidate
             @unpack g = model′
             p = (-sign(dot(g, y2)) * Δ / ellipsoidal_norm(y1, B)) .* y1
@@ -277,6 +281,7 @@ function solve_model(::GeneralizedEigenSolver, Δ, model::ResidualModel)
         else
             # FIXME hard case, this needs to be implemented
             # here we bail and fall back to dogleg
+            # NOTE this is also the fallback for eigensolver gone wrong
             @debug "hard case not implemented, falling back to dogleg"
             dogleg_implementation(Δ, model, pU, pU_norm)
         end

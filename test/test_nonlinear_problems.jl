@@ -136,8 +136,7 @@ end
     for f in TEST_FUNCTIONS
         for local_method in (Dogleg(), GeneralizedEigenSolver())
             @info "solver test" f local_method
-            if (f ≡ PowellBadlyScaled() && local_method ≡ GeneralizedEigenSolver()) ||
-                f ≡ HelicalValley() # cf #6
+            if f ≡ HelicalValley() # cf #6
                 @warn "skipping because broken"
                 continue
             end

@@ -45,3 +45,9 @@ Nonlinear solver using trust region method converged after 9 steps
 This package is very experimental — the interface will be evolving without prior warning or deprecation. You may want to consider the packages below instead.
 
 - [NLsolve.jl](https://github.com/JuliaNLSolvers/NLsolve.jl) is much more mature, but written with a lot of emphasis on using pre-allocated buffers.
+
+- [TRS.jl](https://github.com/oxfordcontrol/TRS.jl) solves trust region subproblems for large scale problems using the generalized eigenvalue solver of Adachi et al (2017). This solver is also implemented in this package, but not optimized for large-scale sparse problems.
+
+## References
+
+See <CITATIONS.bib>.

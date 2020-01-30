@@ -109,7 +109,7 @@ start(::HelicalValley) = Float64[-1, 0, 0]
 
 function (::HelicalValley)(x)
     x1, x2, x3 = x
-    θ = 1/(2π) * atan(x1 > 0 ? x2 / x1 : x1 / x2)
+    θ = 1/(2π) * (x1 > 0 ? atan(x2 / x1) : (atan(x1 / x2) + 0.5))
     [10*(x3 - 10 * θ), 10 * (hypot(x1, x2) - 1), x3]
 end
 
@@ -133,9 +133,14 @@ TEST_FUNCTIONS = [F_NWp281(), Rosenbrock(), PowellSingular(), PowellBadlyScaled(
 end
 
 @testset "solver tests" begin
-    for f in TEST_FUNCTIONS[3:3]
-        res = trust_region_solver(ForwardDiff_wrapper(f, dimension(f)), start(f))
-        @test res.converged
-        @test res.x ≈ root(f) atol = 1e-4 * dimension(f)
+    for f in setdiff(TEST_FUNCTIONS,
+                     [HelicalValley()]) # cf #6
+        for local_method in (Dogleg(), GeneralizedEigenSolver())
+            res = trust_region_solver(ForwardDiff_wrapper(f, dimension(f)), start(f);
+                                      local_method = local_method)
+            @info "solver test" f local_method
+            @test res.converged
+            @test res.x ≈ root(f) atol = 1e-4 * dimension(f)
+        end
     end
 end

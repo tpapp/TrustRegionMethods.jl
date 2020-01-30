@@ -450,7 +450,9 @@ $(TYPEDEF)
 A buffer for wrapping a (nonlinear) mapping `f` to calculate the Jacobian with
 `ForwardDiff.jacobian`.
 """
-struct ForwardDiffBuffer{TF,TR,TC}
+struct ForwardDiffBuffer{TX,TF,TR,TC}
+    "Buffer for inputs."
+    x::TX
     "A function that maps vectors to residual vectors."
     f::TF
     "`DiffResults` buffer for Jacobians."
@@ -487,7 +489,7 @@ function ForwardDiff_wrapper(f, n, jacobian_config...)
     x = zeros(n)
     result = DiffResults.JacobianResult(x)
     cfg = ForwardDiff.JacobianConfig(f, x, jacobian_config...)
-    ForwardDiffBuffer(f, result, cfg)
+    ForwardDiffBuffer(x, f, result, cfg)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", fdb::ForwardDiffBuffer)
@@ -495,9 +497,10 @@ function Base.show(io::IO, ::MIME"text/plain", fdb::ForwardDiffBuffer)
     print(io, "AD wrapper via ForwardDiff for ℝⁿ→ℝⁿ function, n = $(n)")
 end
 
-function (fdb::ForwardDiffBuffer)(x)
-    @unpack f, result, cfg = fdb
-    ForwardDiff.jacobian!(result, f, x, cfg)
+function (fdb::ForwardDiffBuffer)(y)
+    @unpack x, f, result, cfg = fdb
+    # copy to our own buffer to work with types other than Float64
+    ForwardDiff.jacobian!(result, f, copy!(x, y), cfg)
     (residual = copy(DiffResults.value(result)),
      Jacobian = copy(DiffResults.jacobian(result)))
 end

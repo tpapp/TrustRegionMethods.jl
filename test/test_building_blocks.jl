@@ -110,6 +110,16 @@ end
                                                       1.0, singular_model)...)
 end
 
+@testset "ForwardDiff wrapper" begin
+    r = 0:3
+    f(x) = x .+ r
+    ff = ForwardDiff_wrapper(f, 4)
+    J = Matrix(Diagonal(ones(4)))
+    for x ∈ (randn(4), zeros(Int, 4), range(1//5, 3//7; length = 4))
+        @test ff(x) == (residual = Float64.(x .+ r), Jacobian = J)
+    end
+end
+
 @testset "printing" begin       # just test that printing is defined
     ff = ForwardDiff_wrapper(x -> Diagonal(ones(2)) * x, 2)
     @test repr(ff) isa AbstractString

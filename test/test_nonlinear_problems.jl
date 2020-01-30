@@ -69,7 +69,7 @@ dimension(::PowellSingular) = 4
 
 root(::PowellSingular) = zeros(4)
 
-start(::PowellSingular) = Float64[3, -1, 0, 1]
+start(::PowellSingular) = [3, -1, 0, 1]
 
 function (::PowellSingular)(x)
     x1, x2, x3, x4 = x
@@ -87,7 +87,7 @@ dimension(::PowellBadlyScaled) = 2
 
 root(::PowellBadlyScaled) = [1.0981593296999222e-5, 9.106146739865656]
 
-start(::PowellBadlyScaled) = Float64[0, 1]
+start(::PowellBadlyScaled) = [0, 1]
 
 function (::PowellBadlyScaled)(x)
     x1, x2 = x
@@ -103,9 +103,9 @@ struct HelicalValley end
 
 dimension(::HelicalValley) = 3
 
-root(::HelicalValley) = Float64[1, 0, 0]
+root(::HelicalValley) = [1, 0, 0]
 
-start(::HelicalValley) = Float64[-1, 0, 0]
+start(::HelicalValley) = [-1, 0, 0]
 
 function (::HelicalValley)(x)
     x1, x2, x3 = x

@@ -1,5 +1,8 @@
-using LinearAlgebra, Test, TrustRegionMethods, UnPack
+using LinearAlgebra, Test, TrustRegionMethods, UnPack, Logging
 import Optim
+
+# log debug messages
+global_logger(SimpleLogger(stdout, Logging.Debug))
 
 include("test_building_blocks.jl")
 

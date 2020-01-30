@@ -1,12 +1,13 @@
 module TrustRegionMethods
 
-export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper, SolverStoppingCriterion
+export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper, SolverStoppingCriterion,
+    Dogleg, GeneralizedEigenSolver
 
 using ArgCheck: @argcheck
 import DiffResults
-using DocStringExtensions: FIELDS, SIGNATURES, TYPEDEF
+using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF
 import ForwardDiff
-using LinearAlgebra: dot, issuccess, lu, norm
+using LinearAlgebra: dot, eigen!, I, issuccess, lu, norm, Symmetric, UniformScaling
 using UnPack: @unpack
 
 ####
@@ -16,12 +17,13 @@ using UnPack: @unpack
 """
 $(TYPEDEF)
 
-A *linear model* for system of nonlinear equations, relative to the origin, as
+A *linear model* for system of nonlinear equations, relative to the origin.
+
+The L2 norm induces the objective function
 
 ```math
 m(p) = p' J' r + 1/2 p' J' J p
 ```
-
 approximating some `f(x) = \\| r(x) \\|^2_2` as
 
 ```math
@@ -38,6 +40,32 @@ struct ResidualModel{TR,TJ}
         @argcheck size(J) ≡ (n, n) "Non-conformable residual and Jacobian."
         new{TR,TJ}(r, J)
     end
+end
+
+"""
+$(TYPEDEF)
+
+A *quadratic model* for a minimization problem, relative to the origin, with the objective
+function
+
+```math
+m(p) = p' g + 1/2 g' A g
+```
+"""
+struct MinimizationModel{TG,TA}
+    g::TG
+    A::TA
+    # FIXME constructor enforces symmetry of `A`, document, but do we actually rely on it?
+end
+
+"""
+$(SIGNATURES)
+
+Convert a model for a residual to a minimization model using the L2 norm.
+"""
+function MinimizationModel(model::ResidualModel)
+    @unpack r, J = model
+    MinimizationModel(J' * r, Symmetric(J' * J))
 end
 
 """
@@ -114,24 +142,143 @@ function unconstrained_optimum(model::ResidualModel)
     end
 end
 
+####
+#### solvers
+####
+
+"""
+`$(FUNCTIONNAME)(method, Δ, model)`
+
+Optimize the `model` with the given constraint `Δ` using `method`. Returns the following
+values:
+
+- the optimum,
+- the norm of the optimum,
+- a boolean indicating whether the constraint binds.
+"""
+function solve_model end
+
+"""
+The dogleg method.
+
+A simple and efficient heuristic for solving local trust region problems. Does not
+necessarily find the optimum, but improves on the Cauchy point.
+"""
+struct Dogleg end
+
 """
 $(SIGNATURES)
 
-Implementation of the *dogleg method*. Return the minimizer and a boolean indicating if the
-constraint is binding.
+Implementats the branch of the dogleg method where it is already determined that the
+unconstrained optimum is lies outside the `Δ` ball. Returns the same kind of results as
+[`solve_model`](@ref).
 """
-function dogleg(Δ, model::ResidualModel)
+function dogleg_implementation(Δ, model, pU, pU_norm)
+    pC, pC_norm, on_boundary = cauchy_point(Δ, model)
+    if on_boundary || isinf(pU_norm)
+        pC, pC_norm, on_boundary
+    else
+        D = pU .- pC
+        τ = dogleg_boundary(Δ, D, pC, pC_norm)
+        pC .+ D .* τ, Δ, true
+    end
+end
+
+function solve_model(::Dogleg, Δ, model::ResidualModel)
     pU, pU_norm = unconstrained_optimum(model)
     if pU_norm ≤ Δ
-        pU, false
+        pU, pU_norm, false
     else
-        pC, pC_norm, on_boundary = cauchy_point(Δ, model)
-        if on_boundary || isinf(pU_norm)
-            pC, true
+        dogleg_implementation(Δ, model, pU, pU_norm)
+    end
+end
+
+####
+#### Generalized eigenvalue solver (Adachi et al 2017).
+####
+#### NOTE:
+####
+#### - Notation mostly follows the paper.
+####
+#### - implementation has ellipsoidal norm in some parts, for future generalizations,
+####   currently unused
+####
+#### - “hard case” is not implemented yet, falls back to dogleg
+####
+#### - using the general eigensolver which is very wasteful (this is a proof of concept)
+
+"""
+Generalized eigenvalue solver (Adachi et al 2017).
+"""
+struct GeneralizedEigenSolver end
+
+"""
+$(SIGNATURES)
+
+Kernel for the generalized eigenvalue solver (methods specialize on the ellipsoidal norm
+matrix `B`). Solves the `M̃(λ)` pencil in Adachi et al (2017), eg Algorithm 5.1.
+
+Returns
+
+- `λ`, the largest eigenvalue,
+
+- the gap to the next eigenvalue
+
+- `y1` and `y2`, the two parts of the corresponding generalized eigenvalue,
+
+All values are real, methods are type stable.
+"""
+function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
+    @unpack g, A = model
+    n = length(g)
+    G = ((g * g') ./ abs2(Δ))
+    M = [-A G; B -A]
+    E = eigen!(M)
+    T = promote_type(Float32, eltype(M)) # type acrobatics because eigen! is not type stable
+    function _real(z)
+        # Squash imaginary part of quantities which are theoretically supposed to be real.
+        # The heuristic below is meant to catch eigensolver failures which are not supposed
+        # to happen in practice. These should be reported as bugs.
+        x = real(z)
+        ϵ = eps(T)
+        @argcheck(imag(z) ≤ n*(√ϵ*abs(x) + ϵ^0.25),
+                  "Imaginary part in real number, please see comment and report an issue.")
+        T(x)
+    end
+    λ = _real(E.values[end])::T
+    gap = abs(λ - E.values[end - 1])::T
+    y = _real.(E.vectors[:, end])::Vector{T}
+    y1 = y[1:n]
+    y2 = y[(n + 1):end]
+    λ, gap, y1, y2
+end
+
+"""
+$(SIGNATURES)
+
+Ellipsoidal norm ``\\| x \\|_B = x'Bx``.
+"""
+ellipsoidal_norm(x, ::UniformScaling) = norm(x, 2)
+
+function solve_model(::GeneralizedEigenSolver, Δ, model::ResidualModel)
+    B = I                       # FIXME: we hardcode Euclidean norm for now
+    pU, pU_norm = unconstrained_optimum(model)
+    if pU_norm < Δ
+        pU, pU_norm, false
+    else
+        model′ = MinimizationModel(model)
+        λ, gap, y1, y2 = ges_kernel(Δ, model′, B)
+        τ = √(eps(typeof(λ)) / gap)
+        if norm(y1, 2) > τ
+            # “easy” case, we can generate a candidate
+            @unpack g = model′
+            p = (-sign(dot(g, y2)) * Δ / ellipsoidal_norm(y1, B)) .* y1
+            p, Δ, true
         else
-            D = pU .- pC
-            τ = dogleg_boundary(Δ, D, pC, pC_norm)
-            pC .+ D .* τ, true
+            # FIXME hard case, this needs to be implemented
+            # here we bail and fall back to dogleg
+            @debug "hard case not implemented, falling back to dogleg"
+            dogleg_implementation(Δ, model, pU, pU_norm)
         end
     end
 end
@@ -164,21 +311,22 @@ reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
 
 function reduction_ratio(model::ResidualModel, p, r′)
     @unpack r, J = model
-    @argcheck all(isfinite, r) && all(isfinite, J) "residual or Jacobian are not finite"
     r2 = sum(abs2, r)
-    (r2 - sum(abs2, r′)) / (r2 - sum(abs2, r .+ J * p))
+    r′2 = sum(abs2, r′)
+    ρ = (r2 - r′2) / (r2 - sum(abs2, r .+ J * p))
+    isfinite(ρ) ? ρ : -one(ρ)
 end
 
-function trust_region_step(parameters::TrustRegionParameters, f, Δ, x, fx)
+function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
     model = ResidualModel(fx.residual, fx.Jacobian)
-    p, on_boundary = dogleg(Δ, model)
+    p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = x .+ p
     fx′ = f(x′)
     ρ = reduction_ratio(model, p, fx′.residual)
     Δ′ =
         if ρ < 0.25
-            norm(p, 2) / 4
+            p_norm / 4
         elseif ρ > 0.75 && on_boundary
             min(2 * Δ, Δ̄)
         else
@@ -270,13 +418,14 @@ Returns a [`TrustRegionResult`](@ref) object.
 """
 function trust_region_solver(f, x;
                              parameters = TrustRegionParameters(),
+                             local_method = Dogleg(),
                              stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
                              Δ = 1.0)
     fx = f(x)
     iterations = 1
     while true
-        Δ, x, fx = trust_region_step(parameters, f, Δ, x, fx)
+        Δ, x, fx = trust_region_step(parameters, local_method, f, Δ, x, fx)
         iterations += 1
         do_stop, convergence_statistics = check_stopping_criterion(stopping_criterion, fx)
         reached_max_iter = iterations ≥ maximum_iterations

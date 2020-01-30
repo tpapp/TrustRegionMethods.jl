@@ -2,15 +2,23 @@
 ##### unit tests for building blocks
 #####
 
-using TrustRegionMethods: ResidualModel, cauchy_point, dogleg_boundary, dogleg,
+using TrustRegionMethods: ResidualModel, cauchy_point, dogleg_boundary, solve_model,
     unconstrained_optimum
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::ResidualModel)
     @unpack r, J = model
     function(p)
-        p' * J' * r + 1/2 * p' * J' * J * p
+        0.5 * sum(abs2, r .+ J * p)
     end
+end
+
+"Basic sanity check for solver results (splat into tail arguments)."
+function is_consistent_solver_results(Δ, p, p_norm, on_boundary)
+    all(isfinite, p) &&
+        (0 ≤ p_norm ≤ Δ) &&
+        (norm(p, 2) ≈ p_norm) &&
+        ((p_norm ≈ Δ) == on_boundary)
 end
 
 @testset "Nonlinear model constructor sanity checks" begin
@@ -39,14 +47,13 @@ end
         opt = Optim.optimize(τ -> m_obj(pS .* τ), 0, 1, Optim.Brent())
 
         # calculate and compare
-        pC, pC_norm, on_boundary = @inferred cauchy_point(Δ, model)
+        pC, _, _= pC_results = @inferred cauchy_point(Δ, model)
+        @test is_consistent_solver_results(Δ, pC_results...)
         @test pC ≈ (Optim.minimizer(opt) .* pS) atol = eps()^0.25 * n
-        @test norm(pC, 2) ≈ pC_norm
-        @test (pC_norm ≈ Δ) == on_boundary
 
         # estimated decrease invariant
         g_norm = norm(J' * r, 2)
-        @test -m_obj(pC) ≥ 0.5 * g_norm * min(Δ, g_norm / norm(J' * J, 2))
+        @test m_obj(zeros(n)) - m_obj(pC) ≥ 0.5 * g_norm * min(Δ, g_norm / norm(J' * J, 2))
     end
 end
 
@@ -66,25 +73,41 @@ end
 
 @testset "dogleg" begin
     for _ in 1:100
+
+        # random problem
         n = rand(2:10)
         model = ResidualModel(rand(n), rand(n, n))
         Δ = abs(randn())
+        m_obj = model_objective(model)
+
+        # unconstrained optimum and Cauchy point
         pU, pU_norm = @inferred unconstrained_optimum(model)
         @test pU_norm ≥ 0
-        pC, _, _ = cauchy_point(Δ, model)
-        pD, on_boundary = @inferred dogleg(Δ, model)
-        @test (norm(pD, 2) ≈ Δ) == on_boundary # report boundary correctly
-        m_obj = model_objective(model)
+        pC, _, _ = pC_results = cauchy_point(Δ, model)
+        @test is_consistent_solver_results(Δ, pC_results...)
+
+        # Dogleg
+        pD, _, _, = pD_results = @inferred solve_model(Dogleg(), Δ, model)
+        @test is_consistent_solver_results(Δ, pD_results...)
         @test m_obj(pD) ≤ m_obj(pC) # improve on Cauchy point
+
+        # GES
+        pG, _, _ = pG_results = @inferred solve_model(GeneralizedEigenSolver(), Δ, model)
+        @test is_consistent_solver_results(Δ, pG_results...)
+        @test m_obj(pG) ≤ m_obj(pD) # improve on dogleg
     end
 end
 
 @testset "singularities" begin
+    # just some basic sanity check to see if the solver can deal with these
     singular_model = ResidualModel(ones(2), ones(2, 2))
-    pC, pC_norm, _ = cauchy_point(1.0, singular_model)
-    @test all(isfinite, pC) && isfinite(pC_norm)
-    p, _ = dogleg(1.0, singular_model)
-    @test all(isfinite, p)
+    Δ = 1.0
+    @test is_consistent_solver_results(Δ, cauchy_point(1.0, singular_model)...)
+    @test is_consistent_solver_results(Δ, solve_model(Dogleg(), 1.0, singular_model)...)
+    # FIXME: solver below could do better, just that hard case is not implemented.
+    # check for that when it is.
+    @test is_consistent_solver_results(Δ, solve_model(GeneralizedEigenSolver(),
+                                                      1.0, singular_model)...)
 end
 
 @testset "printing" begin       # just test that printing is defined

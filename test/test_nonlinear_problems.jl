@@ -109,7 +109,7 @@ start(::HelicalValley) = [-1, 0, 0]
 
 function (::HelicalValley)(x)
     x1, x2, x3 = x
-    θ = 1/(2π) * (x1 > 0 ? atan(x2 / x1) : (atan(x1 / x2) + 0.5))
+    θ = 1/(2π) * atan(x2 / x1) + ifelse(x1 < 0, 0.5, 0)
     [10*(x3 - 10 * θ), 10 * (hypot(x1, x2) - 1), x3]
 end
 
@@ -136,7 +136,7 @@ end
     for f in TEST_FUNCTIONS
         for local_method in (Dogleg(), GeneralizedEigenSolver())
             @info "solver test" f local_method
-            if f ≡ HelicalValley() # cf #6
+            if false            # condition on broken tests here
                 @warn "skipping because broken"
                 continue
             end

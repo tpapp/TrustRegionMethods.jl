@@ -8,7 +8,7 @@ import DiffResults
 using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF
 import ForwardDiff
 using KrylovKit: eigsolve
-using LinearAlgebra: dot, I, issuccess, lu, norm, Symmetric, UniformScaling
+using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling
 using UnPack: @unpack
 
 ####
@@ -126,6 +126,26 @@ end
 """
 $(SIGNATURES)
 
+Return `(F, is_valid_F)` where
+
+1. `F` is a form (usually a factorization) of the argument that supports `F \\ r` for
+   vectors `r`,
+
+2. `is_valid_F` is a boolean indicating whether `F` can be used in this form (eg `false` for
+   a singular factorization).
+"""
+function _factorize(J::AbstractMatrix)
+    LU = lu(J; check = false)
+    LU, issuccess(LU)
+end
+
+function _factorize(J::Diagonal)
+    J, all(x -> x > 0, diag(J))
+end
+
+"""
+$(SIGNATURES)
+
 Calculate the unconstrained optimum of the model, return its norm as the second value.
 
 When the second value is *infinite*, the unconstrained optimum should not be used as this
@@ -133,12 +153,12 @@ indicates a singular problem.
 """
 function unconstrained_optimum(model::ResidualModel)
     @unpack r, J = model
-    LU = lu(J; check = false)
-    if issuccess(LU)
-        pU = -(LU \ r)
+    F, is_valid_F = _factorize(J)
+    if is_valid_F
+        pU = -(F \ r)
         pU, norm(pU, 2)
     else
-        ∞ = convert(eltype(LU), Inf)
+        ∞ = oftype(one(eltype(r)) / one(eltype(F)), Inf)
         fill(∞, length(r)), ∞
     end
 end

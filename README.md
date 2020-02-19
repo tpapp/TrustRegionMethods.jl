@@ -17,7 +17,7 @@ Experimental Julia package for trust region methods, with an emphasis on
 
 3. *AD agnostic function evaluations*: an objective function just returns a value with properties `residual` and `Jacobian`. It can be any type that supports this, and carry extra payload relevant to your problem. However, if you just want to code an ℝⁿ → ℝⁿ function, it can do AD for you using wrappers (currently `ForwardDiff`).
 
-4. *Support for bailing out*: some inputs just may not be possible or worthwhile to evaluated for very complicated functions (eg economic models). You can signal this by returning `nothing`.
+4. *Support for bailing out*: some inputs just may not be possible or worthwhile to evaluated for very complicated functions (eg economic models). You can signal this by returning non-finite residuals (eg `NaN`s).
 
 ## Example
 

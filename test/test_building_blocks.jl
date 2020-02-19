@@ -133,7 +133,7 @@ end
 
     @testset "handle infeasible" begin
         ff = ForwardDiff_wrapper(x -> all(x .> 0) ? x : x .+ NaN, 4)
-        @test ff(-ones(4)) ≡ nothing
+        @test !all(isfinite, ff(-ones(4)).residual)
         @test ff(ones(4)) == (residual = ones(4), Jacobian = Diagonal(ones(4)))
     end
 end

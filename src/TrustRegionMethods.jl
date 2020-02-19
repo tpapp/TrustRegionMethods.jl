@@ -322,6 +322,17 @@ function reduction_ratio(model::ResidualModel, p, r′)
     isfinite(ρ) ? ρ : -one(ρ)
 end
 
+"""
+$(SIGNATURES)
+
+Take a trust region step using `local_method`.
+
+`f` is the function that returns the residual and the Jacobian (see
+[`trust_region_solver`](@ref)).
+
+`Δ` is the trust region radius, `x` is the position, `fx = f(x)`. Caller ensures that the
+latter is feasible.
+"""
 function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
     model = ResidualModel(fx.residual, fx.Jacobian)
@@ -409,15 +420,12 @@ Solve `f ≈ 0` using trust region methods, starting from `x`.
 
 1. takes vectors real numbers of the same length as `x`,
 
-2. returns a *either*
-
-    a. `nothing`, if the objective cannot be evaluated,
-
-    b. a value with properties `residual` and `Jacobian`, containing a vector and a
-    conformable matrix, with finite values. A `NamedTuple` can be used for this, but any
-    structure with these properties will be accepted. Importantly, this is treated as a
-    single object and can be used to return extra information (a “payload”), which will be
-    ignored by this function.
+2. returns a value with properties `residual` and `Jacobian`, containing a vector and a
+   conformable matrix, with finite values for both or a non-finite residual (for infeasible
+   points; Jacobian is ignored). A `NamedTuple` can be used for this, but any structure with
+   these properties will be accepted. Importantly, this is treated as a single object and
+   can be used to return extra information (a “payload”), which will be ignored by this
+   function.
 
 Returns a [`TrustRegionResult`](@ref) object.
 """
@@ -473,7 +481,7 @@ Wrap an ``ℝⁿ`` function `f` in a callable that can be used in [`trust_region
 directly. Remaining parameters are passed on to `ForwardDiff.JacobianConfig`, and can be
 used to set eg chunk size.
 
-Non-finite residuals will be treated as infeasible (`nothing`).
+Non-finite residuals will be treated as infeasible.
 
 ```jldoctest
 julia> f(x) = [1.0 2; 3 4] * x - ones(2)
@@ -509,11 +517,7 @@ function (fdb::ForwardDiffBuffer)(y)
     # copy to our own buffer to work with types other than Float64
     ForwardDiff.jacobian!(result, f, copy!(x, y), cfg)
     residual = copy(DiffResults.value(result))
-    if all(isfinite, residual)
-        (residual = residual, Jacobian = copy(DiffResults.jacobian(result)))
-    else
-        nothing
-    end
+    (residual = residual, Jacobian = copy(DiffResults.jacobian(result)))
 end
 
 end # module

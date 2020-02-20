@@ -110,14 +110,14 @@ end
 
 @testset "singularities" begin
     # just some basic sanity check to see if the solver can deal with these
-    singular_model = ResidualModel(ones(2), ones(2, 2))
+    singular1 = ResidualModel(ones(2), ones(2, 2))
     Δ = 1.0
-    @test is_consistent_solver_results(Δ, cauchy_point(1.0, singular_model)...)
-    @test is_consistent_solver_results(Δ, solve_model(Dogleg(), 1.0, singular_model)...)
+    @test is_consistent_solver_results(Δ, cauchy_point(1.0, singular1)...)
+    @test is_consistent_solver_results(Δ, solve_model(Dogleg(), 1.0, singular1)...)
     # FIXME: solver below could do better, just that hard case is not implemented.
     # check for that when it is.
-    @test is_consistent_solver_results(Δ, solve_model(GeneralizedEigenSolver(),
-                                                      1.0, singular_model)...)
+    @test is_consistent_solver_results(Δ, solve_model(GeneralizedEigenSolver(), 1.0,
+                                                      singular1)...)
 end
 
 @testset "ForwardDiff wrapper" begin

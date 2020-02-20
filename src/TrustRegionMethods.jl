@@ -81,12 +81,15 @@ Return three values:
 2. the (Euclidean) *norm* of `pC`
 
 3. a boolean indicating whether the constraint was binding.
+
+Caller guarantees non-zero gradient.
 """
 function cauchy_point(Δ::Real, model::ResidualModel)
     @unpack r, J = model
     g = J' * r
     q = g' * (J' * J) * g
     g_norm = norm(g, 2)
+    @argcheck g_norm > 0
     τ = if q ≤ 0              # practically 0 (semi-definite form) but allow for float error
         one(q)
     else

@@ -400,7 +400,7 @@ $(TYPEDEF)
 
 $(FIELDS)
 """
-struct TrustRegionResult{T,TX,TFX}
+struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TFX}
     "The final trust region radius."
     Δ::T
     "The last value (the root only when converged)."
@@ -413,6 +413,12 @@ struct TrustRegionResult{T,TX,TFX}
     converged::Bool
     "Number of iterations (≈ number of function evaluations)."
     iterations::Int
+end
+
+function TrustRegionResult(Δ::T1, x::AbstractVector{T2}, fx, residual_norm::T3, converged,
+                           iterations) where {T1 <: Real, T2 <: Real, T3 <: Real}
+    T = promote_type(T1, T2, T3)
+    TrustRegionResult(T(Δ), T.(x), fx, T(residual_norm), converged, iterations)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
@@ -455,6 +461,7 @@ function trust_region_solver(f, x;
                              stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
                              Δ = 1.0)
+    @argcheck Δ > 0
     fx = f(x)
     iterations = 1
     while true

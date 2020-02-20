@@ -23,11 +23,26 @@
 end
 
 @testset "infeasible region" begin
-    # the solution x = 0 is infeasible, but do we get close?
-    function f(x)
-        (residual = x[1] ≥ 1 ? x : x .+ NaN, Jacobian = Diagonal(ones(length(x))))
+    @testset "bounded away from solution" begin
+        # the solution x = 0 is infeasible, but do we get close?
+        function f(x)
+            (residual = x[1] ≥ 1 ? x : x .+ NaN, Jacobian = Diagonal(ones(length(x))))
+        end
+        result = trust_region_solver(f, [3.0])
+        @test !result.converged
+        @test result.x ≈ [1.0]
     end
-    result = trust_region_solver(f, [3.0])
-    @test !result.converged
-    @test result.x ≈ [1.0]
+
+    @testset "jump over narrow infeasible region" begin
+        history = Bool[]
+        function f3(x)
+            is_feasible = abs(x[1] - 2) ≥ 0.1 # first step takes us here
+            push!(history, is_feasible)
+            (residual = is_feasible ? x .^ 3  : x .+ NaN, Jacobian = Diagonal(@. 3 * abs2(x)))
+        end
+        result = trust_region_solver(f3, [3.0]; Δ = 5)
+        @test result.converged
+        @test result.x ≈ [0.0] atol = 0.03
+        @test any(!, history)   # check that infeasible region was visited
+    end
 end

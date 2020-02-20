@@ -8,7 +8,7 @@ import DiffResults
 using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF
 import ForwardDiff
 using KrylovKit: eigsolve
-using LinearAlgebra: dot, I, issuccess, lu, norm, Symmetric, UniformScaling
+using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling
 using UnPack: @unpack
 
 ####
@@ -81,12 +81,15 @@ Return three values:
 2. the (Euclidean) *norm* of `pC`
 
 3. a boolean indicating whether the constraint was binding.
+
+Caller guarantees non-zero gradient.
 """
 function cauchy_point(Δ::Real, model::ResidualModel)
     @unpack r, J = model
     g = J' * r
     q = g' * (J' * J) * g
     g_norm = norm(g, 2)
+    @argcheck g_norm > 0
     τ = if q ≤ 0              # practically 0 (semi-definite form) but allow for float error
         one(q)
     else
@@ -126,6 +129,26 @@ end
 """
 $(SIGNATURES)
 
+Return `(F, is_valid_F)` where
+
+1. `F` is a form (usually a factorization) of the argument that supports `F \\ r` for
+   vectors `r`,
+
+2. `is_valid_F` is a boolean indicating whether `F` can be used in this form (eg `false` for
+   a singular factorization).
+"""
+function _factorize(J::AbstractMatrix)
+    LU = lu(J; check = false)
+    LU, issuccess(LU)
+end
+
+function _factorize(J::Diagonal)
+    J, all(x -> x > 0, diag(J))
+end
+
+"""
+$(SIGNATURES)
+
 Calculate the unconstrained optimum of the model, return its norm as the second value.
 
 When the second value is *infinite*, the unconstrained optimum should not be used as this
@@ -133,12 +156,12 @@ indicates a singular problem.
 """
 function unconstrained_optimum(model::ResidualModel)
     @unpack r, J = model
-    LU = lu(J; check = false)
-    if issuccess(LU)
-        pU = -(LU \ r)
+    F, is_valid_F = _factorize(J)
+    if is_valid_F
+        pU = -(F \ r)
         pU, norm(pU, 2)
     else
-        ∞ = convert(eltype(LU), Inf)
+        ∞ = oftype(one(eltype(r)) / one(eltype(F)), Inf)
         fill(∞, length(r)), ∞
     end
 end
@@ -312,8 +335,6 @@ $(SIGNATURES)
 Ratio between predicted (using `model`, at `p`) and actual reduction (taken from the
 residual value `r′`). Will return an arbitrary negative number for infeasible coordinates.
 """
-reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
-
 function reduction_ratio(model::ResidualModel, p, r′)
     @unpack r, J = model
     r2 = sum(abs2, r)
@@ -322,6 +343,17 @@ function reduction_ratio(model::ResidualModel, p, r′)
     isfinite(ρ) ? ρ : -one(ρ)
 end
 
+"""
+$(SIGNATURES)
+
+Take a trust region step using `local_method`.
+
+`f` is the function that returns the residual and the Jacobian (see
+[`trust_region_solver`](@ref)).
+
+`Δ` is the trust region radius, `x` is the position, `fx = f(x)`. Caller ensures that the
+latter is feasible.
+"""
 function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
     model = ResidualModel(fx.residual, fx.Jacobian)
@@ -369,7 +401,7 @@ $(TYPEDEF)
 
 $(FIELDS)
 """
-struct TrustRegionResult{T,TX,TFX}
+struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TFX}
     "The final trust region radius."
     Δ::T
     "The last value (the root only when converged)."
@@ -382,6 +414,12 @@ struct TrustRegionResult{T,TX,TFX}
     converged::Bool
     "Number of iterations (≈ number of function evaluations)."
     iterations::Int
+end
+
+function TrustRegionResult(Δ::T1, x::AbstractVector{T2}, fx, residual_norm::T3, converged,
+                           iterations) where {T1 <: Real, T2 <: Real, T3 <: Real}
+    T = promote_type(T1, T2, T3)
+    TrustRegionResult(T(Δ), T.(x), fx, T(residual_norm), converged, iterations)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
@@ -409,15 +447,12 @@ Solve `f ≈ 0` using trust region methods, starting from `x`.
 
 1. takes vectors real numbers of the same length as `x`,
 
-2. returns a *either*
-
-    a. `nothing`, if the objective cannot be evaluated,
-
-    b. a value with properties `residual` and `Jacobian`, containing a vector and a
-    conformable matrix, with finite values. A `NamedTuple` can be used for this, but any
-    structure with these properties will be accepted. Importantly, this is treated as a
-    single object and can be used to return extra information (a “payload”), which will be
-    ignored by this function.
+2. returns a value with properties `residual` and `Jacobian`, containing a vector and a
+   conformable matrix, with finite values for both or a non-finite residual (for infeasible
+   points; Jacobian is ignored). A `NamedTuple` can be used for this, but any structure with
+   these properties will be accepted. Importantly, this is treated as a single object and
+   can be used to return extra information (a “payload”), which will be ignored by this
+   function.
 
 Returns a [`TrustRegionResult`](@ref) object.
 """
@@ -427,6 +462,7 @@ function trust_region_solver(f, x;
                              stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
                              Δ = 1.0)
+    @argcheck Δ > 0
     fx = f(x)
     iterations = 1
     while true
@@ -473,7 +509,7 @@ Wrap an ``ℝⁿ`` function `f` in a callable that can be used in [`trust_region
 directly. Remaining parameters are passed on to `ForwardDiff.JacobianConfig`, and can be
 used to set eg chunk size.
 
-Non-finite residuals will be treated as infeasible (`nothing`).
+Non-finite residuals will be treated as infeasible.
 
 ```jldoctest
 julia> f(x) = [1.0 2; 3 4] * x - ones(2)
@@ -509,11 +545,7 @@ function (fdb::ForwardDiffBuffer)(y)
     # copy to our own buffer to work with types other than Float64
     ForwardDiff.jacobian!(result, f, copy!(x, y), cfg)
     residual = copy(DiffResults.value(result))
-    if all(isfinite, residual)
-        (residual = residual, Jacobian = copy(DiffResults.jacobian(result)))
-    else
-        nothing
-    end
+    (residual = residual, Jacobian = copy(DiffResults.jacobian(result)))
 end
 
 end # module

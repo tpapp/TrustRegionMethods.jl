@@ -143,4 +143,5 @@ end
     @test repr(ff) isa AbstractString
     res = trust_region_solver(ff, ones(2))
     @test repr(res) isa AbstractString
+    @test repr(TrustRegionResult(1, [1.0], nothing, 1.0, false, 99)) isa AbstractString
 end

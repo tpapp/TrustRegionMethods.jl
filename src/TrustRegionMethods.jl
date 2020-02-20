@@ -332,8 +332,6 @@ $(SIGNATURES)
 Ratio between predicted (using `model`, at `p`) and actual reduction (taken from the
 residual value `r′`). Will return an arbitrary negative number for infeasible coordinates.
 """
-reduction_ratio(fx, p, ::Nothing) = -one(eltype(p))
-
 function reduction_ratio(model::ResidualModel, p, r′)
     @unpack r, J = model
     r2 = sum(abs2, r)

@@ -46,3 +46,29 @@ end
         @test any(!, history)   # check that infeasible region was visited
     end
 end
+
+#####
+##### nonlinear test problems
+#####
+
+TEST_FUNCTIONS = [F_NWp281(),
+                  Rosenbrock(),
+                  PowellSingular(),
+                  PowellBadlyScaled(),
+                  HelicalValley()]
+
+@testset "solver tests" begin
+    for f in TEST_FUNCTIONS
+        for local_method in (Dogleg(), GeneralizedEigenSolver())
+            @info "solver test" f local_method
+            if false            # condition on broken tests here
+                @warn "skipping because broken"
+                continue
+            end
+            res = trust_region_solver(ForwardDiff_wrapper(f, domain_dimension(f)),
+                                      starting_point(f); local_method = local_method)
+            @test res.converged
+            @test res.x ≈ root(f) atol = 1e-4 * domain_dimension(f)
+        end
+    end
+end

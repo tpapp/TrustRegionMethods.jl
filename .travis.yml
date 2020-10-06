@@ -1,6 +1,6 @@
 ## Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
-dist: xenial
+dist: bionic
 os:
   - linux
 #  - osx
@@ -8,6 +8,7 @@ julia:
   - 1.2
   - 1.3
   - 1.4
+  - 1.5
   - nightly
 notifications:
   email: false

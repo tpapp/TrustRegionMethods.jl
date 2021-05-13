@@ -346,6 +346,26 @@ end
 """
 $(SIGNATURES)
 
+Checks residual and Jacobian and throws an appropriate error if they are not both finite.
+
+Internal, each evaluation of `f` should call this.
+"""
+function _check_residual_Jacobian(x, fx)
+    finite_value = all(isfinite, fx.residual)
+    finite_Jacobian = all(isfinite, fx.Jacobian)
+    if !finite_value || !finite_Jacobian
+        if finite_value == finite_Jacobian == false
+            msg = "residual and Jacobian"
+        else
+            msg = !finite_value ? "residual" : "Jacobian"
+        end
+        DomainError(x, "Non-finite values in $(msg)")
+    end
+end
+
+"""
+$(SIGNATURES)
+
 Take a trust region step using `local_method`.
 
 `f` is the function that returns the residual and the Jacobian (see
@@ -360,6 +380,7 @@ function trust_region_step(parameters::TrustRegionParameters, local_method, f, �
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = x .+ p
     fx′ = f(x′)
+    _check_residual_Jacobian(x′, fx′)
     ρ = reduction_ratio(model, p, fx′.residual)
     Δ′ =
         if ρ < 0.25
@@ -464,6 +485,7 @@ function trust_region_solver(f, x;
                              Δ = 1.0)
     @argcheck Δ > 0
     fx = f(x)
+    _check_residual_Jacobian(x, fx)
     iterations = 1
     while true
         Δ, x, fx = trust_region_step(parameters, local_method, f, Δ, x, fx)

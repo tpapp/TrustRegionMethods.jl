@@ -15,7 +15,7 @@ struct Dogleg end
 """
 $(SIGNATURES)
 
-Implementats the branch of the dogleg method where it is already determined that the
+Implements the branch of the dogleg method where it is already determined that the
 unconstrained optimum is lies outside the `Δ` ball. Returns the same kind of results as
 [`solve_model`](@ref).
 """

@@ -11,6 +11,14 @@ export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper, SolverStoppi
 struct TrustRegionParameters{T}
     η::T
     Δ̄::T
+    @doc """
+    $(SIGNATURES)
+
+    Trust region method parameters.
+
+    - `η`: trust reduction threshold
+    - `Δ̄`: initial trust region radius
+    """
     function TrustRegionParameters(η::T, Δ̄::T) where {T <: Real}
         @argcheck 0 < η < 0.25
         @argcheck Δ̄ > 0
@@ -92,6 +100,16 @@ end
 
 struct SolverStoppingCriterion{T <: Real}
     residual_norm_tolerance::T
+    @doc """
+    $(SIGNATURES)
+
+    Stopping criterion for trust region colver.
+
+    Arguments:
+
+    - `residual_norm_tolerance`: convergence is declared when the norm of the residual is
+      below this value
+    """
     function SolverStoppingCriterion(residual_norm_tolerance::T) where {T}
         @argcheck residual_norm_tolerance > 0
         new{T}(residual_norm_tolerance)

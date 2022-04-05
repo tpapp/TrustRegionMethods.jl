@@ -63,7 +63,6 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
     end
 end
 
-
 function solve_model(::GeneralizedEigenSolver, Δ, model::ResidualModel)
     B = I                       # FIXME: we hardcode Euclidean norm for now
     pU, pU_norm = unconstrained_optimum(model)

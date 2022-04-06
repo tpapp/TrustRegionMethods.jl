@@ -28,3 +28,5 @@ $(SIGNATURES)
 Ellipsoidal norm ``\\| x \\|_B = x'Bx``.
 """
 ellipsoidal_norm(x, ::UniformScaling) = norm(x, 2)
+
+ellipsoidal_norm(x, B) = dot(x, B, x)

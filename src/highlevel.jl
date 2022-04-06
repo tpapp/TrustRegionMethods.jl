@@ -30,19 +30,6 @@ TrustRegionParameters(η, Δ̄) = TrustRegionParameterS(promote(η, Δ̄)...)
 
 TrustRegionParameters(; η = 0.125, Δ̄ = Inf) = TrustRegionParameters(η, Δ̄)
 
-"""
-$(SIGNATURES)
-
-Ratio between predicted (using `model`, at `p`) and actual reduction (taken from the
-residual value `r′`). Will return an arbitrary negative number for infeasible coordinates.
-"""
-function reduction_ratio(model::ResidualModel, p, r′)
-    @unpack r, J = model
-    r2 = sum(abs2, r)
-    r′2 = sum(abs2, r′)
-    ρ = (r2 - r′2) / (r2 - sum(abs2, r .+ J * p))
-    isfinite(ρ) ? ρ : -one(ρ)
-end
 
 """
 $(SIGNATURES)
@@ -77,12 +64,12 @@ latter is feasible.
 """
 function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
-    model = ResidualModel(fx.residual, fx.Jacobian)
+    model = local_residual_model(fx.residual, fx.Jacobian)
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = x .+ p
     fx′ = f(x′)
     _check_residual_Jacobian(x′, fx′)
-    ρ = reduction_ratio(model, p, fx′.residual)
+    ρ = reduction_ratio(model, p, residual_minimand(fx′.residual))
     Δ′ =
         if ρ < 0.25
             p_norm / 4

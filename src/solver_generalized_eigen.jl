@@ -21,7 +21,7 @@ struct GeneralizedEigenSolver end
 $(SIGNATURES)
 
 Kernel for the generalized eigenvalue solver (methods specialize on the ellipsoidal norm
-matrix `B`). Solves the `M̃(λ)` pencil in Adachi et al (2017), eg Algorithm 5.1.
+matrix `S`). Solves the `M̃(λ)` pencil in Adachi et al (2017), eg Algorithm 5.1.
 
 Returns
 
@@ -36,11 +36,11 @@ All values are real, methods are type stable.
 When theorerical assumptions are violated, `gap` will be non-finite and a debug statement is
 emitted. No other values should be used in this case.
 """
-function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
-    @unpack g, A = model
+function ges_kernel(Δ, model::LocalModel, S::UniformScaling)
+    @unpack g, B = model
     n = length(g)
     G = ((g * g') ./ abs2(Δ))
-    M = [-A G; B -A]
+    M = [-B G; S -B]
     λs, vs, info = eigsolve(M, 2, :LR)
     @argcheck info.converged ≥ 2 "Eigensolver did not converge."
     T = promote_type(Float64, eltype(M))
@@ -63,19 +63,18 @@ function ges_kernel(Δ, model::MinimizationModel, B::UniformScaling)
     end
 end
 
-function solve_model(::GeneralizedEigenSolver, Δ, model::ResidualModel)
-    B = I                       # FIXME: we hardcode Euclidean norm for now
+function solve_model(::GeneralizedEigenSolver, Δ, model::LocalModel)
+    S = I                       # FIXME: we hardcode Euclidean norm for now
     pU, pU_norm = unconstrained_optimum(model)
     if pU_norm < Δ
         pU, pU_norm, false
     else
-        model′ = MinimizationModel(model)
-        λ, gap, y1, y2 = ges_kernel(Δ, model′, B)
+        λ, gap, y1, y2 = ges_kernel(Δ, model, S)
         τ = √(eps(typeof(λ)) / gap)
         if isfinite(gap) && norm(y1, 2) > τ
             # “easy” case, we can generate a candidate
-            @unpack g = model′
-            p = (-sign(dot(g, y2)) * Δ / ellipsoidal_norm(y1, B)) .* y1
+            @unpack g = model
+            p = (-sign(dot(g, y2)) * Δ / ellipsoidal_norm(y1, S)) .* y1
             p, Δ, true
         else
             # FIXME hard case, this needs to be implemented

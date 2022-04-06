@@ -47,7 +47,8 @@ Nonlinear solver using trust region method converged after 9 steps
 """
 function ForwardDiff_wrapper(f, n, jacobian_config...)
     x = zeros(n)
-    result = DiffResults.JacobianResult(x)
+    y = f(x)
+    result = DiffResults.JacobianResult(y, x)
     cfg = ForwardDiff.JacobianConfig(f, x, jacobian_config...)
     ForwardDiffBuffer(x, f, result, cfg)
 end

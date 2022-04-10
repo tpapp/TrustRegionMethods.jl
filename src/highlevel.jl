@@ -11,6 +11,14 @@ export trust_region_solver, TrustRegionResult, ForwardDiff_wrapper, SolverStoppi
 struct TrustRegionParameters{T}
     η::T
     Δ̄::T
+    @doc """
+    $(SIGNATURES)
+
+    Trust region method parameters.
+
+    - `η`: trust reduction threshold
+    - `Δ̄`: initial trust region radius
+    """
     function TrustRegionParameters(η::T, Δ̄::T) where {T <: Real}
         @argcheck 0 < η < 0.25
         @argcheck Δ̄ > 0
@@ -22,19 +30,6 @@ TrustRegionParameters(η, Δ̄) = TrustRegionParameterS(promote(η, Δ̄)...)
 
 TrustRegionParameters(; η = 0.125, Δ̄ = Inf) = TrustRegionParameters(η, Δ̄)
 
-"""
-$(SIGNATURES)
-
-Ratio between predicted (using `model`, at `p`) and actual reduction (taken from the
-residual value `r′`). Will return an arbitrary negative number for infeasible coordinates.
-"""
-function reduction_ratio(model::ResidualModel, p, r′)
-    @unpack r, J = model
-    r2 = sum(abs2, r)
-    r′2 = sum(abs2, r′)
-    ρ = (r2 - r′2) / (r2 - sum(abs2, r .+ J * p))
-    isfinite(ρ) ? ρ : -one(ρ)
-end
 
 """
 $(SIGNATURES)
@@ -69,12 +64,12 @@ latter is feasible.
 """
 function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
     @unpack η, Δ̄ = parameters
-    model = ResidualModel(fx.residual, fx.Jacobian)
+    model = local_residual_model(fx.residual, fx.Jacobian)
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = x .+ p
     fx′ = f(x′)
     _check_residual_Jacobian(x′, fx′)
-    ρ = reduction_ratio(model, p, fx′.residual)
+    ρ = reduction_ratio(model, p, residual_minimand(fx′.residual))
     Δ′ =
         if ρ < 0.25
             p_norm / 4
@@ -92,6 +87,16 @@ end
 
 struct SolverStoppingCriterion{T <: Real}
     residual_norm_tolerance::T
+    @doc """
+    $(SIGNATURES)
+
+    Stopping criterion for trust region colver.
+
+    Arguments:
+
+    - `residual_norm_tolerance`: convergence is declared when the norm of the residual is
+      below this value
+    """
     function SolverStoppingCriterion(residual_norm_tolerance::T) where {T}
         @argcheck residual_norm_tolerance > 0
         new{T}(residual_norm_tolerance)

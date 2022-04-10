@@ -11,13 +11,14 @@
         for l in (Dogleg(), )
             @show l
             result = trust_region_solver(x -> (residual = J * x .- b, Jacobian = J),
-                                         x0 .* 1000, local_method = l)
+                                         x0 .* 1000, local_method = l,
+                                         maximum_iterations = 50)
+            display(result)
             @test result.x ≈ x0 atol = √eps() * n
             @test norm(result.fx.residual, 2) ≈ 0 atol = √eps()
             @test norm(result.fx.residual, 2) == result.residual_norm
             @test result.fx.Jacobian == J
             @test result.converged
-            display(result)
         end
     end
 end
@@ -55,7 +56,8 @@ TEST_FUNCTIONS = [F_NWp281(),
                   Rosenbrock(),
                   PowellSingular(),
                   PowellBadlyScaled(),
-                  HelicalValley()]
+                  HelicalValley(),
+                  Beale()]
 
 @testset "solver tests" begin
     for f in TEST_FUNCTIONS

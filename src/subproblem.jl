@@ -1,34 +1,6 @@
 #####
-##### generic subproblem interface
+##### local subproblem interface and utility functions
 #####
-
-"""
-$(TYPEDEF)
-
-A *linear model* for system of nonlinear equations, relative to the origin.
-
-The L2 norm induces the objective function
-
-```math
-m(p) = p' J' r + 1/2 p' J' J p
-```
-approximating some `f(x) = \\| r(x) \\|^2_2` as
-
-```math
-1/2 \\| f(x + p) \\|_2^2 \approx 1/2 \\| r + J p \\|_2^2 = \\| r \\|_2^2 + p'J'r + 1/2 p' J' J p
-```
-"""
-struct ResidualModel{TR,TJ}
-    r::TR
-    J::TJ
-    function ResidualModel(r::TR, J::TJ) where {TR,TJ}
-        @argcheck all(isfinite, r) "Non-finite residuals $(r)."
-        @argcheck all(isfinite, J) "Non-finite Jacobian $(J)."
-        n = length(r)
-        @argcheck size(J) ≡ (n, n) "Non-conformable residual and Jacobian."
-        new{TR,TJ}(r, J)
-    end
-end
 
 """
 $(TYPEDEF)
@@ -37,23 +9,45 @@ A *quadratic model* for a minimization problem, relative to the origin, with the
 function
 
 ```math
-m(p) = p' g + 1/2 g' A g
+m(p) = f + p' g + 1/2 g' B g
 ```
 """
-struct MinimizationModel{TG,TA}
+struct LocalModel{TF<:Real,TG<:AbstractVector,TB<:AbstractMatrix}
+    f::TF
     g::TG
-    A::TA
-    # FIXME constructor enforces symmetry of `A`, document, but do we actually rely on it?
+    B::TB
+    function LocalModel(f::TF, g::TG, B::TB) where {TF,TG,TB}
+        n = length(g)
+        @argcheck size(B) == (n, n) DimensionMismatch
+        @argcheck isfinite(f)
+        @argcheck all(isfinite, g)
+        @argcheck all(isfinite, B)
+        new{TF,TG,TB}(f, g, B)
+    end
+    # FIXME we could store information about the definiteness of B, ie if it is known, and
+    # what it is
 end
 
 """
 $(SIGNATURES)
 
-Convert a model for a residual to a minimization model using the L2 norm.
+Convert a residual from a system of equations (in a rootfinding problem) to an objective for
+minimization.
 """
-function MinimizationModel(model::ResidualModel)
-    @unpack r, J = model
-    MinimizationModel(J' * r, Symmetric(J' * J))
+residual_minimand(r) = sum(abs2, r)
+
+"""
+$(SIGNATURES)
+
+Let `r` and `J` be residuals and their Jacobian at some point. We construct a local model as
+
+```math
+m(p) = 1/2 \\| J p - r \\|^2_2 = \\| r \\|^2_2 + p' J ' r + 1/2 p' J' J p
+```
+"""
+function local_residual_model(r::AbstractVector, J::AbstractMatrix)
+    # FIXME B always p.s.d, cf note above
+    LocalModel(residual_minimand(r), J' * r, SELF' * J)
 end
 
 """
@@ -71,11 +65,10 @@ Return three values:
 
 Caller guarantees non-zero gradient.
 """
-function cauchy_point(Δ::Real, model::ResidualModel)
-    @unpack r, J = model
-    g = J' * r
-    q = g' * (J' * J) * g
+function cauchy_point(Δ::Real, model::LocalModel)
+    @unpack g, B = model
     g_norm = norm(g, 2)
+    q = g' * B * g
     @argcheck g_norm > 0
     τ = if q ≤ 0              # practically 0 (semi-definite form) but allow for float error
         one(q)
@@ -88,48 +81,20 @@ end
 """
 $(SIGNATURES)
 
-Finds `\tau` such that
-
-```math
-\\| p_C + τ D \\|_2 = Δ
-```
-
-`pC_norm` is `\\| p_C \\|_2^2`, and can be provided when available.
-
-Caller guarantees that
-
-1. `pC_norm ≤ Δ`,
-
-2. `norm(pC + D, 2) ≥ Δ`.
-
-3. `dot(pC, D) ≥ 0`.
-
-These ensure a meaningful solution `0 ≤ τ ≤ 1`. None of them are checked explicitly.
-"""
-function dogleg_boundary(Δ, D, pC, pC_norm = norm(pC, 2))
-    a = sum(abs2, D)
-    b = 2 * dot(D, pC)
-    c = abs2(pC_norm) - abs2(Δ)
-    (-b + √(abs2(b) - 4 * a * c)) / (2 * a)
-end
-
-"""
-$(SIGNATURES)
-
 Calculate the unconstrained optimum of the model, return its norm as the second value.
 
 When the second value is *infinite*, the unconstrained optimum should not be used as this
 indicates a singular problem.
 """
-function unconstrained_optimum(model::ResidualModel)
-    @unpack r, J = model
-    F, is_valid_F = _factorize(J)
+function unconstrained_optimum(model::LocalModel)
+    @unpack g, B = model
+    F, is_valid_F = _factorize(B)
     if is_valid_F
-        pU = -(F \ r)
+        pU = -(F \ g)
         pU, norm(pU, 2)
     else
-        ∞ = oftype(one(eltype(r)) / one(eltype(F)), Inf)
-        fill(∞, length(r)), ∞
+        ∞ = oftype(one(eltype(g)) / one(eltype(F)), Inf)
+        fill(∞, length(g)), ∞
     end
 end
 
@@ -139,8 +104,33 @@ end
 Optimize the `model` with the given constraint `Δ` using `method`. Returns the following
 values:
 
-- the optimum,
-- the norm of the optimum,
+- the optimum (a vector),
+- the norm of the optimum (a scalar),
 - a boolean indicating whether the constraint binds.
 """
 function solve_model end
+
+"""
+$(SIGNATURES)
+
+Reduction of model objective at `p`, compared to the origin.
+"""
+function model_reduction(model::LocalModel, p)
+    @unpack g, B = model
+    - (dot(p, g) + ellipsoidal_norm(p, B) / 2)
+end
+
+"""
+$(SIGNATURES)
+
+Ratio between predicted (using `model`, at `p`) and actual reduction (using `p_objective`,
+the minimand at `p`).
+
+Will return an arbitrary negative number for infeasible coordinates.
+"""
+function reduction_ratio(model, p, p_objective)
+    Δ_model = model_reduction(model, p)
+    Δ_objective = model.f - p_objective
+    ρ = Δ_objective / Δ_model
+    isfinite(ρ) ? ρ : -one(ρ)
+end

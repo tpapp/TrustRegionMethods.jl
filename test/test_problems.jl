@@ -3,6 +3,8 @@
 #####
 
 @testset "linear problem" begin
+    N = 100
+    ∑iter = 0
     for _ in 1:100
         n = rand(2:10)
         J = randn(n, n)
@@ -19,8 +21,10 @@
             @test norm(result.fx.residual, 2) == result.residual_norm
             @test result.fx.Jacobian == J
             @test result.converged
+            ∑iter += result.iterations
         end
     end
+    global linear_average_iterations = round(Int, ∑iter / N) # save for display
 end
 
 @testset "infeasible region" begin
@@ -52,25 +56,27 @@ end
 ##### nonlinear test problems
 #####
 
-TEST_FUNCTIONS = [F_NWp281(),
-                  Rosenbrock(),
-                  PowellSingular(),
-                  PowellBadlyScaled(),
-                  HelicalValley(),
-                  Beale()]
 
 @testset "solver tests" begin
-    for f in TEST_FUNCTIONS
-        for local_method in (Dogleg(), GeneralizedEigenSolver())
-            @info "solver test" f local_method
-            if false            # condition on broken tests here
-                @warn "skipping because broken"
-                continue
-            end
+    TEST_FUNCTIONS = [F_NWp281(),
+                      Rosenbrock(),
+                      PowellSingular(),
+                      PowellBadlyScaled(),
+                      HelicalValley(),
+                      Beale()]
+    LOCAL_METHODS = [Dogleg(), GeneralizedEigenSolver()]
+    iterations = zeros(Int, length(TEST_FUNCTIONS), length(LOCAL_METHODS))
+    for (i, f) in enumerate(TEST_FUNCTIONS)
+        for (j, local_method) in enumerate(LOCAL_METHODS)
             res = trust_region_solver(ForwardDiff_wrapper(f, domain_dimension(f)),
                                       starting_point(f); local_method = local_method)
             @test res.converged
             @test res.x ≈ root(f) atol = 1e-4 * domain_dimension(f)
+            iterations[i, j] = res.iterations
         end
     end
+    # print number of iterations
+    columns = vcat(Vector{Any}([string.(TEST_FUNCTIONS)]), collect.(eachcol(iterations)))
+    names = vcat(["local"], string.(LOCAL_METHODS))
+    global nonlinear_iterations = DataFrame(columns, names) # save for display
 end

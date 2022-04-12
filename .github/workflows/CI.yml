@@ -19,7 +19,7 @@ jobs:
         version:
           - '1.4' # minimum Julia version we support
           - '1' # Leave this line unchanged. '1' will automatically expand to the latest stable 1.x release of Julia.
-          # - 'nightly' # cf https://github.com/tpapp/TrustRegionMethods.jl/issues/25
+          - 'nightly'
         os:
           - ubuntu-latest
         arch:

@@ -110,7 +110,7 @@ end
 function check_stopping_criterion(nsc::SolverStoppingCriterion, fx)
     r_norm = norm(fx.residual, 2)
     converged = r_norm ≤ nsc.residual_norm_tolerance
-    converged, (converged = converged , residual_norm = r_norm)
+    (converged = converged , residual_norm = r_norm)
 end
 
 """
@@ -174,13 +174,30 @@ Solve `f ≈ 0` using trust region methods, starting from `x`.
    function.
 
 Returns a [`TrustRegionResult`](@ref) object.
+
+# Keyword arguments (with defaults)
+
+- `parameters = TrustRegionParameters()`: parameters for the trust region method
+
+- `local_method = Dogleg()`: the local method to use
+
+- `stopping_criterion = SolverStoppingCriterion()`: the stopping criterion
+
+- `maximum_iterations = 500`: the maximum number of iterations before declaring
+  non-convergence,
+
+- `Δ = 1.0`, the initial trust region radius
+
+- `debug = nothing`: when `≢ nothing`, a function that will be called with an object that
+  has properties `iterations, Δ, x, fx, converged, residual_norm`.
 """
 function trust_region_solver(f, x;
                              parameters = TrustRegionParameters(),
                              local_method = Dogleg(),
                              stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
-                             Δ = 1.0)
+                             Δ = 1.0,
+                             debug = nothing)
     @argcheck Δ > 0
     fx = f(x)
     _check_residual_Jacobian(x, fx)
@@ -188,10 +205,10 @@ function trust_region_solver(f, x;
     while true
         Δ, x, fx = trust_region_step(parameters, local_method, f, Δ, x, fx)
         iterations += 1
-        do_stop, convergence_statistics = check_stopping_criterion(stopping_criterion, fx)
+        @unpack converged, residual_norm = check_stopping_criterion(stopping_criterion, fx)
+        debug ≢ nothing && debug((; iterations, Δ, x, fx, converged, residual_norm))
         reached_max_iter = iterations ≥ maximum_iterations
-        if do_stop || reached_max_iter
-            @unpack converged, residual_norm = convergence_statistics
+        if converged || reached_max_iter
             return TrustRegionResult(Δ, x, fx, residual_norm, converged, iterations)
         end
     end

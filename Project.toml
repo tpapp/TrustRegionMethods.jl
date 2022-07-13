@@ -21,7 +21,7 @@ ForwardDiff = "0.10"
 KrylovKit = "0.4, 0.5"
 SymmetricProducts = "1"
 UnPack = "0.1, 1"
-julia = "1.4"
+julia = "1.6"
 
 [extras]
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"

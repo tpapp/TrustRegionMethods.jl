@@ -1,7 +1,7 @@
 name = "TrustRegionMethods"
 uuid = "14486370-d344-40f0-8ff9-262f8a3330be"
 authors = ["Tamas K. Papp <tkpapp@gmail.com>"]
-version = "0.4.0"
+version = "0.4.1"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
@@ -21,7 +21,7 @@ ForwardDiff = "0.10"
 KrylovKit = "0.4, 0.5"
 SymmetricProducts = "1"
 UnPack = "0.1, 1"
-julia = "1.4"
+julia = "1.6"
 
 [extras]
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"

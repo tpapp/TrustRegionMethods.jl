@@ -137,10 +137,15 @@ end
     end
 end
 
-@testset "printing" begin       # just test that printing is defined
+@testset "printing and debug" begin       # just test that printing is defined
+    _iterations = -1
+    function _debug(args)
+        _iterations = args.iterations
+    end
     ff = ForwardDiff_wrapper(x -> Diagonal(ones(2)) * x, 2)
     @test repr(ff) isa AbstractString
-    res = trust_region_solver(ff, ones(2))
+    res = trust_region_solver(ff, ones(2); debug = _debug)
+    @test _iterations == res.iterations
     @test repr(res) isa AbstractString
     @test repr(TrustRegionResult(1, [1.0], nothing, 1.0, false, 99)) isa AbstractString
 end

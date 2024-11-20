@@ -9,7 +9,7 @@ A *quadratic model* for a minimization problem, relative to the origin, with the
 function
 
 ```math
-m(p) = f + p' g + 1/2 g' B g
+m(p) = f + p' g + 1/2 p' B p
 ```
 """
 struct LocalModel{TF<:Real,TG<:AbstractVector,TB<:AbstractMatrix}

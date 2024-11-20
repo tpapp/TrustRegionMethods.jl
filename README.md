@@ -4,35 +4,48 @@
 [![build](https://github.com/tpapp/TrustRegionMethods.jl/workflows/CI/badge.svg)](https://github.com/tpapp/TrustRegionMethods.jl/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/github/tpapp/TrustRegionMethods.jl/graph/badge.svg?token=Tds39dbcz1)](https://codecov.io/github/tpapp/TrustRegionMethods.jl)
 
-Experimental Julia package for trust region methods, with an emphasis on
+A simple, and somewhat experimental Julia package for trust region methods, with an emphasis on
 
 1. *Clean functional style*: no preallocated buffers, resulting in less complicated code.
 
 2. *A simple modular interface*: iterate stepwise, or use a simple wrapper.
 
-3. *AD agnostic function evaluations*: an objective function just returns a value with properties `residual` and `Jacobian`. It can be any type that supports this, and carry extra payload relevant to your problem. However, if you just want to code an ℝⁿ → ℝⁿ function, it can do AD for you using wrappers (currently `ForwardDiff`).
+3. *AD via [DifferentiationInterface](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/)*:
+   harness the power of Julia's AD ecosystem in a simple way.
 
-4. *Support for bailing out*: some inputs just may not be possible or worthwhile to evaluated for very complicated functions (eg economic models). You can signal this by returning non-finite residuals (eg `NaN`s).
+4. *Support for bailing out*: some inputs just may not be possible or worthwhile to evaluate for very complicated functions (eg economic models). You can signal this by returning non-finite residuals (eg `NaN`s) early.
 
 ## Example
 
 ```julia
 julia> using TrustRegionMethods
 
-julia> f(x) = [1.0 2; 3 4] * x - ones(2) # very simple linear function
-f (generic function with 1 method)
+julia> const A = [1.0 2.0; 3.0 4.0]
+2×2 Matrix{Float64}:
+ 1.0  2.0
+ 3.0  4.0
 
-julia> ff = ForwardDiff_wrapper(f, 2)    # AD via a wrapper results in a callable
-AD wrapper via ForwardDiff for ℝⁿ→ℝⁿ function, n = 2
+julia> f(x) = A * x .- exp.(x);
 
-julia> ff(ones(2))                       # this is what the solver will need
-(residual = [2.0, 6.0], Jacobian = [1.0 2.0; 3.0 4.0])
+julia> F = trust_region_problem(f, zeros(2))
+trust region problem
+  residual dimension: 2
+  initial x: [0.0, 0.0]
+  AD backend: ADTypes.AutoForwardDiff()
 
-julia> trust_region_solver(ff, [100.0, 100.0]) # remote starting point
-Nonlinear solver using trust region method converged after 9 steps
-  with ‖x‖₂ = 3.97e-15, Δ = 128.0
-  x = [-1.0, 1.0]
-  r = [-1.78e-15, 3.55e-15]
+julia> result = trust_region_solver(F)
+Nonlinear solver using trust region method converged after 5 steps
+  with ‖x‖₂ = 1.26e-15, Δ = 1.0
+  x = [-0.12, 0.503]
+  r = [-8.88e-16, -8.88e-16]
+
+julia> result.converged
+true
+
+julia> result.x
+2-element Vector{Float64}:
+ -0.11979242665753244
+  0.5034484917613987
 ```
 
 ## Related packages

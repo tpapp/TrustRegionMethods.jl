@@ -266,7 +266,6 @@ Returns a [`TrustRegionResult`](@ref) object.
 julia> using TrustRegionMethods
 
 julia> const A = [1.0 2.0; 3.0 4.0]
-WARNING: redefinition of constant Main.A. This may fail, cause incorrect answers, or produce other errors.
 2×2 Matrix{Float64}:
  1.0  2.0
  3.0  4.0

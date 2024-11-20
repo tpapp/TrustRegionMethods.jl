@@ -3,7 +3,7 @@
 #####
 
 using TrustRegionMethods: local_residual_model, LocalModel, cauchy_point, dogleg_boundary,
-    ges_kernel, solve_model, unconstrained_optimum, evaluate_∂F, ∂FX
+    ges_kernel, solve_model, unconstrained_optimizer, evaluate_∂F, ∂FX
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::LocalModel)
@@ -54,6 +54,9 @@ end
         g_norm = norm(J' * r, 2)
         @test m_obj(zeros(n)) - m_obj(pC) ≥ 0.5 * g_norm * min(Δ, g_norm / norm(J' * J, 2))
     end
+
+    # Cauchy point when q == 0
+    @test cauchy_point(1.5, LocalModel(0.0, [-2.0, 1.0], [1.0 0; 2 0]))[2] ≈ 1.5
 end
 
 @testset "dogleg quadratic" begin
@@ -89,8 +92,8 @@ end
         Δ = abs(randn())
         m_obj = model_objective(model)
 
-        # unconstrained optimum and Cauchy point
-        pU, pU_norm = @inferred unconstrained_optimum(model)
+        # unconstrained optimizer and Cauchy point
+        pU, pU_norm = @inferred unconstrained_optimizer(model)
         @test pU_norm ≥ 0
         pC, _, _ = pC_results = cauchy_point(Δ, model)
         @test is_consistent_solver_results(Δ, pC_results...)
@@ -141,19 +144,4 @@ end
         @test !all(isfinite, @inferred(evaluate_∂F(ff2, .-ones(4))).residual)
         @test @inferred(evaluate_∂F(ff2, ones(4))) ≃ ∂FX(ones(4), ones(4), Diagonal(ones(4)))
     end
-end
-
-@testset "printing and debug" begin       # just test that printing is defined
-    _iterations = -1
-    function _debug(args)
-        _iterations = args.iterations
-    end
-    ff = trust_region_problem(x -> Diagonal(ones(2)) * x, ones(2))
-    @test occursin("trust region problem", repr(MIME("text/plain"), ff))
-    res = trust_region_solver(ff; debug = _debug)
-    @test _iterations == res.iterations
-    @test occursin("converged", repr(MIME("text/plain"), res))
-    @test occursin("didn't converge",
-                   repr(MIME("text/plain"),
-                        TrustRegionResult(1.0, [1.0], [1.0], [1.0;;], 1.0, false, 99)))
 end

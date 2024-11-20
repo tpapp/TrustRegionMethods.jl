@@ -11,7 +11,6 @@
         x0 = randn(n)
         b = J * x0
         for l in (Dogleg(), )
-            @show l
             F = trust_region_problem(x -> J * x .- b, x0 .* 1000)
             result = trust_region_solver(F; local_method = l, maximum_iterations = 50)
             display(result)
@@ -28,12 +27,12 @@ end
 
 @testset "almost linear problem restricted to SVector" begin
     fS(x::SVector) = SMatrix{2,2}(1.0, 2.0, 3.0, 4.0) * x .- exp.(x)
-    F = trust_region_problem(fS, SVector(0.0, 0.0))
-    result = trust_region_solver(F)
+    # NOTE: this is inferred because ForwardDiff can calculate the chunk size for SVector
+    F = @inferred trust_region_problem(fS, SVector(0.0, 0.0))
+    result = @inferred trust_region_solver(F)
     @test result.x isa SVector
     @test result.converged
 end
-
 
 @testset "infeasible region" begin
     @testset "bounded away from solution" begin
@@ -78,7 +77,7 @@ end
     iterations = zeros(Int, length(TEST_FUNCTIONS), length(LOCAL_METHODS))
     for (i, f) in enumerate(TEST_FUNCTIONS)
         for (j, local_method) in enumerate(LOCAL_METHODS)
-            F = trust_region_problem(f, @show(starting_point(f)))
+            F = trust_region_problem(f, starting_point(f))
             res = trust_region_solver(F; local_method = local_method)
             @test res.converged
             @test res.x ≈ root(f) atol = 1e-4 * domain_dimension(f)

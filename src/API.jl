@@ -2,7 +2,8 @@
 ##### high level API
 #####
 
-export trust_region_problem, trust_region_solver, TrustRegionResult, SolverStoppingCriterion
+export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRegionResult,
+    SolverStoppingCriterion
 
 ####
 #### problem definition API
@@ -115,7 +116,7 @@ struct TrustRegionParameters{T}
     end
 end
 
-TrustRegionParameters(η, Δ̄) = TrustRegionParameterS(promote(η, Δ̄)...)
+TrustRegionParameters(η, Δ̄) = TrustRegionParameters(promote(η, Δ̄)...)
 
 TrustRegionParameters(; η = 0.125, Δ̄ = Inf) = TrustRegionParameters(η, Δ̄)
 

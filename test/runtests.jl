@@ -9,6 +9,7 @@ global_logger(SimpleLogger(stdout, Logging.Debug))
 Random.seed!(1)
 
 include("test_building_blocks.jl")
+include("test_API.jl")
 include("test_problems.jl")
 
 # display diagnostics

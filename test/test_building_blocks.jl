@@ -7,7 +7,7 @@ using TrustRegionMethods: local_residual_model, LocalModel, cauchy_point, dogleg
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::LocalModel)
-    @unpack f, g, B = model
+    (; f, g, B) = model
     function(p)
         f + dot(p, g) + 0.5 * dot(p, B, p)
     end

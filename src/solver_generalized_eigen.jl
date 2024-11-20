@@ -37,7 +37,7 @@ When theorerical assumptions are violated, `gap` will be non-finite and a debug 
 emitted. No other values should be used in this case.
 """
 function ges_kernel(Δ, model::LocalModel, S::UniformScaling)
-    @unpack g, B = model
+    (; g, B) = model
     n = length(g)
     G = ((g * g') ./ abs2(Δ))
     M = [-B G; S -B]
@@ -73,7 +73,7 @@ function solve_model(::GeneralizedEigenSolver, Δ, model::LocalModel)
         τ = √(eps(typeof(λ)) / gap)
         if isfinite(gap) && norm(y1, 2) > τ
             # “easy” case, we can generate a candidate
-            @unpack g = model
+            (; g) = model
             p = (-sign(dot(g, y2)) * Δ / ellipsoidal_norm(y1, S)) .* y1
             p, Δ, true
         else

@@ -59,7 +59,7 @@ function Base.show(io::IO, ::MIME"text/plain", fdb::ForwardDiffBuffer)
 end
 
 function (fdb::ForwardDiffBuffer)(y)
-    @unpack x, f, result, cfg = fdb
+    (; x, f, result, cfg) = fdb
     # copy to our own buffer to work with types other than Float64
     ForwardDiff.jacobian!(result, f, copy!(x, y), cfg)
     residual = copy(DiffResults.value(result))

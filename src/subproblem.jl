@@ -66,7 +66,7 @@ Return three values:
 Caller guarantees non-zero gradient.
 """
 function cauchy_point(Δ::Real, model::LocalModel)
-    @unpack g, B = model
+    (; g, B) = model
     g_norm = norm(g, 2)
     q = g' * B * g
     @argcheck g_norm > 0
@@ -87,7 +87,7 @@ When the second value is *infinite*, the unconstrained optimum should not be use
 indicates a singular problem.
 """
 function unconstrained_optimum(model::LocalModel)
-    @unpack g, B = model
+    (; g, B) = model
     F, is_valid_F = _factorize(B)
     if is_valid_F
         pU = -(F \ g)
@@ -116,7 +116,7 @@ $(SIGNATURES)
 Reduction of model objective at `p`, compared to the origin.
 """
 function model_reduction(model::LocalModel, p)
-    @unpack g, B = model
+    (; g, B) = model
     - (dot(p, g) + ellipsoidal_norm(p, B) / 2)
 end
 

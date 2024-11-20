@@ -59,7 +59,7 @@ function dogleg_implementation(Δ, model, pU, pU_norm)
 end
 
 function solve_model(::Dogleg, Δ, model)
-    pU, pU_norm = unconstrained_optimum(model)
+    pU, pU_norm = unconstrained_optimizer(model)
     if pU_norm ≤ Δ
         pU, pU_norm, false
     else

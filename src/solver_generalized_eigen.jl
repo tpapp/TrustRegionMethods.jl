@@ -65,7 +65,7 @@ end
 
 function solve_model(::GeneralizedEigenSolver, Δ, model::LocalModel)
     S = I                       # FIXME: we hardcode Euclidean norm for now
-    pU, pU_norm = unconstrained_optimum(model)
+    pU, pU_norm = unconstrained_optimizer(model)
     if pU_norm < Δ
         pU, pU_norm, false
     else

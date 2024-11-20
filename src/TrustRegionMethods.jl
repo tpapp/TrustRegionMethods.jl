@@ -7,7 +7,6 @@ import ForwardDiff
 using KrylovKit: eigsolve
 using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling
 using SymmetricProducts: SELF
-using UnPack: @unpack
 
 include("utilities.jl")
 include("subproblem.jl")

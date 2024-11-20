@@ -63,7 +63,7 @@ Take a trust region step using `local_method`.
 latter is feasible.
 """
 function trust_region_step(parameters::TrustRegionParameters, local_method, f, Δ, x, fx)
-    @unpack η, Δ̄ = parameters
+    (; η, Δ̄) = parameters
     model = local_residual_model(fx.residual, fx.Jacobian)
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = x .+ p
@@ -142,7 +142,7 @@ function TrustRegionResult(Δ::T1, x::AbstractVector{T2}, fx, residual_norm::T3,
 end
 
 function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
-    @unpack Δ, x, fx, residual_norm, converged, iterations = trr
+    (; Δ, x, fx, residual_norm, converged, iterations) = trr
     _sig(x) = round(x; sigdigits = 3)
     print(io, "Nonlinear solver using trust region method ")
     if converged
@@ -205,7 +205,7 @@ function trust_region_solver(f, x;
     while true
         Δ, x, fx = trust_region_step(parameters, local_method, f, Δ, x, fx)
         iterations += 1
-        @unpack converged, residual_norm = check_stopping_criterion(stopping_criterion, fx)
+        (; converged, residual_norm) = check_stopping_criterion(stopping_criterion, fx)
         debug ≢ nothing && debug((; iterations, Δ, x, fx, converged, residual_norm))
         reached_max_iter = iterations ≥ maximum_iterations
         if converged || reached_max_iter

@@ -1,5 +1,5 @@
 using LinearAlgebra, Test, TrustRegionMethods, Logging, NonlinearTestProblems, Random,
-    DataFrames
+    DataFrames, StaticArrays
 import Optim
 
 # log debug messages

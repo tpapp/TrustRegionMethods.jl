@@ -26,6 +26,15 @@
     global linear_average_iterations = round(Int, ∑iter / N) # save for display
 end
 
+@testset "almost linear problem restricted to SVector" begin
+    fS(x::SVector) = SMatrix{2,2}(1.0, 2.0, 3.0, 4.0) * x .- exp.(x)
+    F = trust_region_problem(fS, SVector(0.0, 0.0))
+    result = trust_region_solver(F)
+    @test result.x isa SVector
+    @test result.converged
+end
+
+
 @testset "infeasible region" begin
     @testset "bounded away from solution" begin
         # the solution x = 0 is infeasible, but do we get close?

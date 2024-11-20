@@ -8,10 +8,21 @@ export trust_region_problem, trust_region_solver, TrustRegionResult, SolverStopp
 #### problem definition API
 ####
 
+"""
+$(TYPEDEF)
+
+A container for a struct region problem. Create with [`trust_region_problem`](@ref).
+
+Internal, not part of the API.
+"""
 struct TrustRegionProblem{TF,TX,TA,TP}
+    "The function we are solving for ``f(x) ≈ 0`"
     f::TF
+    "The initial `x`, also used to create `AD_prep`"
     initial_x::TX
+    "The AD backend, provided by the user"
     AD_backend::TA
+    "preparation for AD"
     AD_prep::TP
 end
 
@@ -28,6 +39,14 @@ $(SIGNATURES)
 
 Define a trust region problem for solving ``f(x) ≈ 0``, with `initial_x`.
 
+`f` should map vectors to vectors, not necessarily the same size, but the dimension of
+the output be as large as that of the input.
+
+`initial_x` should be an `::AbstractVector{T}` type that is closed under addition and
+elementwise multiplication by type `T`. For example, if `initial_x::Vector{Float64}` or
+`initial_x::SVector{N,Float64}`, then it should be sufficient if `f` handles that, if
+not, please open an issue.
+
 !!! NOTE
     For optimal performance, specify the details of the `AD_backend` argument, eg chunk
     size for `ForwardDiff`.
@@ -40,12 +59,27 @@ function trust_region_problem(f, initial_x; AD_backend = AutoForwardDiff())
     TrustRegionProblem(f, initial_x, AD_backend, AD_prep)
 end
 
+"""
+$(TYPEDEF)
+
+Internal representation of the function and the Jacobian evaluated at a particular `x`.
+Not part of the API.
+
+# Fields
+
+$(FIELDS)
+"""
 struct ∂FX{TX,TV,TJ}
     x::TX
     residual::TV
     Jacobian::TJ
 end
 
+"""
+$(SIGNATURES)
+
+Evaluate the function and the Jacobian at `x`, returning a [`∂FX`](@ref) object.
+"""
 function evaluate_∂F(F::TrustRegionProblem{TF,TX}, x::T) where {TF,TX,T}
     (; f, AD_backend, AD_prep) = F
     if !(T ≡ TX)
@@ -93,8 +127,8 @@ Take a trust region step using `local_method`.
 `f` is the function that returns the residual and the Jacobian (see
 [`trust_region_solver`](@ref)).
 
-`Δ` is the trust region radius, `x` is the position, `∂fx = evaluate_∂Ff(x)`. Caller ensures that the
-latter is feasible.
+`Δ` is the trust region radius, `x` is the position, `∂fx = evaluate_∂F(x)`. Caller
+ensures that the latter is feasible.
 """
 function trust_region_step(parameters::TrustRegionParameters, local_method,
                            F::TrustRegionProblem, Δ, ∂fx::∂FX)
@@ -151,6 +185,9 @@ end
 """
 $(TYPEDEF)
 
+A container to return the result of [`trust_region_solver`](@ref). Fields are part of
+the API and can be accessed by the user.
+
 # Fields
 
 $(FIELDS)
@@ -202,18 +239,8 @@ end
 """
 $(SIGNATURES)
 
-Solve `f ≈ 0` using trust region methods, starting from `x`.
-
-`f` is a callable (function) that
-
-1. takes vectors real numbers of the same length as `x`,
-
-2. returns a value with properties `residual` and `Jacobian`, containing a vector and a
-   conformable matrix, with finite values for both or a non-finite residual (for infeasible
-   points; Jacobian is ignored). A `NamedTuple` can be used for this, but any structure with
-   these properties will be accepted. Importantly, this is treated as a single object and
-   can be used to return extra information (a “payload”), which will be ignored by this
-   function.
+Solve `f ≈ 0` using trust region methods, starting from `x`. Should be provided with a problem
+wrapper, see [`trust_region_problem`](@ref).
 
 Returns a [`TrustRegionResult`](@ref) object.
 
@@ -232,6 +259,40 @@ Returns a [`TrustRegionResult`](@ref) object.
 
 - `debug = nothing`: when `≢ nothing`, a function that will be called with an object that
   has properties `iterations, Δ, x, residual, Jacobian, converged, residual_norm`.
+
+# Example
+
+```jldoctest
+julia> using TrustRegionMethods
+
+julia> const A = [1.0 2.0; 3.0 4.0]
+WARNING: redefinition of constant Main.A. This may fail, cause incorrect answers, or produce other errors.
+2×2 Matrix{Float64}:
+ 1.0  2.0
+ 3.0  4.0
+
+julia> f(x) = A * x .- exp.(x);
+
+julia> F = trust_region_problem(f, zeros(2))
+trust region problem
+  residual dimension: 2
+  initial x: [0.0, 0.0]
+  AD backend: ADTypes.AutoForwardDiff()
+
+julia> result = trust_region_solver(F)
+Nonlinear solver using trust region method converged after 5 steps
+  with ‖x‖₂ = 1.26e-15, Δ = 1.0
+  x = [-0.12, 0.503]
+  r = [-8.88e-16, -8.88e-16]
+
+julia> result.converged
+true
+
+julia> result.x
+2-element Vector{Float64}:
+ -0.11979242665753244
+  0.5034484917613987
+```
 """
 function trust_region_solver(F::TrustRegionProblem;
                              parameters = TrustRegionParameters(),

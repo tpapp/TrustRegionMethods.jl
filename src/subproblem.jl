@@ -47,7 +47,9 @@ m(p) = 1/2 \\| J p - r \\|^2_2 = \\| r \\|^2_2 + p' J ' r + 1/2 p' J' J p
 """
 function local_residual_model(r::AbstractVector, J::AbstractMatrix)
     # FIXME B always p.s.d, cf note above
-    LocalModel(residual_minimand(r), J' * r, SELF' * J)
+    m = residual_minimand(r)
+    @argcheck all(isfinite, m) "Cannot build a model for non-finite residuals."
+    LocalModel(m, J' * r, SELF' * J)
 end
 
 """
@@ -81,12 +83,12 @@ end
 """
 $(SIGNATURES)
 
-Calculate the unconstrained optimum of the model, return its norm as the second value.
+Calculate the unconstrained optimizer of the model, return its norm as the second value.
 
-When the second value is *infinite*, the unconstrained optimum should not be used as this
+When the second value is *infinite*, the unconstrained optimizer should not be used as this
 indicates a singular problem.
 """
-function unconstrained_optimum(model::LocalModel)
+function unconstrained_optimizer(model::LocalModel)
     (; g, B) = model
     F, is_valid_F = _factorize(B)
     if is_valid_F
@@ -104,8 +106,8 @@ end
 Optimize the `model` with the given constraint `Δ` using `method`. Returns the following
 values:
 
-- the optimum (a vector),
-- the norm of the optimum (a scalar),
+- the optimizer (a vector),
+- the norm of the optimizer (a scalar),
 - a boolean indicating whether the constraint binds.
 """
 function solve_model end

@@ -12,14 +12,13 @@
         b = J * x0
         for l in (Dogleg(), )
             @show l
-            result = trust_region_solver(x -> (residual = J * x .- b, Jacobian = J),
-                                         x0 .* 1000, local_method = l,
-                                         maximum_iterations = 50)
+            F = trust_region_problem(x -> J * x .- b, x0 .* 1000)
+            result = trust_region_solver(F; local_method = l, maximum_iterations = 50)
             display(result)
             @test result.x ≈ x0 atol = √eps() * n
-            @test norm(result.fx.residual, 2) ≈ 0 atol = √eps()
-            @test norm(result.fx.residual, 2) == result.residual_norm
-            @test result.fx.Jacobian == J
+            @test norm(result.residual, 2) ≈ 0 atol = √eps()
+            @test norm(result.residual, 2) == result.residual_norm
+            @test result.Jacobian == J
             @test result.converged
             ∑iter += result.iterations
         end
@@ -30,10 +29,11 @@ end
 @testset "infeasible region" begin
     @testset "bounded away from solution" begin
         # the solution x = 0 is infeasible, but do we get close?
-        function f(x)
-            (residual = x[1] ≥ 1 ? x : x .+ NaN, Jacobian = Diagonal(ones(length(x))))
+        function f2(x)
+            x[1] ≥ 1 ? x : x .+ NaN
         end
-        result = trust_region_solver(f, [3.0])
+        F2 = trust_region_problem(f2, [3.0])
+        result = trust_region_solver(F2)
         @test !result.converged
         @test result.x ≈ [1.0]
     end
@@ -43,9 +43,10 @@ end
         function f3(x)
             is_feasible = abs(x[1] - 2) ≥ 0.1 # first step takes us here
             push!(history, is_feasible)
-            (residual = is_feasible ? x .^ 3  : x .+ NaN, Jacobian = Diagonal(@. 3 * abs2(x)))
+            is_feasible ? x .^ 3  : x .+ NaN
         end
-        result = trust_region_solver(f3, [3.0]; Δ = 5)
+        F3 = trust_region_problem(f3, [3.0])
+        result = trust_region_solver(F3; Δ = 5)
         @test result.converged
         @test result.x ≈ [0.0] atol = 0.03
         @test any(!, history)   # check that infeasible region was visited
@@ -68,8 +69,8 @@ end
     iterations = zeros(Int, length(TEST_FUNCTIONS), length(LOCAL_METHODS))
     for (i, f) in enumerate(TEST_FUNCTIONS)
         for (j, local_method) in enumerate(LOCAL_METHODS)
-            res = trust_region_solver(ForwardDiff_wrapper(f, domain_dimension(f)),
-                                      starting_point(f); local_method = local_method)
+            F = trust_region_problem(f, @show(starting_point(f)))
+            res = trust_region_solver(F; local_method = local_method)
             @test res.converged
             @test res.x ≈ root(f) atol = 1e-4 * domain_dimension(f)
             iterations[i, j] = res.iterations

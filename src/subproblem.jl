@@ -47,7 +47,9 @@ m(p) = 1/2 \\| J p - r \\|^2_2 = \\| r \\|^2_2 + p' J ' r + 1/2 p' J' J p
 """
 function local_residual_model(r::AbstractVector, J::AbstractMatrix)
     # FIXME B always p.s.d, cf note above
-    LocalModel(residual_minimand(r), J' * r, SELF' * J)
+    m = residual_minimand(r)
+    @argcheck all(isfinite, m) "Cannot build a model for non-finite residuals."
+    LocalModel(m, J' * r, SELF' * J)
 end
 
 """

@@ -5,7 +5,7 @@ version = "0.4.4"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
-DiffResults = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
@@ -14,7 +14,7 @@ SymmetricProducts = "075c16e0-7ab9-11e8-024b-f7dece19ca2d"
 
 [compat]
 ArgCheck = "1, 2"
-DiffResults = "1"
+DifferentiationInterface = "0.6.23"
 DocStringExtensions = "0.8, 0.9"
 ForwardDiff = "0.10"
 KrylovKit = "0.4, 0.5, 0.6, 0.7, 0.8"

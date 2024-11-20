@@ -3,7 +3,7 @@
 #####
 
 using TrustRegionMethods: local_residual_model, LocalModel, cauchy_point, dogleg_boundary,
-    ges_kernel, solve_model, unconstrained_optimum
+    ges_kernel, solve_model, unconstrained_optimum, evaluate_∂F, ∂FX
 
 "Return a closure that evaluates to the objective function of a model."
 function model_objective(model::LocalModel)
@@ -119,21 +119,27 @@ end
                                                       singular1)...)
 end
 
-@testset "ForwardDiff wrapper" begin
+# define for comparison in the test below
+function (≃)(a::∂FX, b::∂FX)
+    a.x == b.x && a.residual == b.residual && a.Jacobian == b.Jacobian
+end
+
+@testset "DifferentiationInterfaces wrapper" begin
     @testset "different input types" begin
         r = 0:3
         f(x) = x .+ r
-        ff = ForwardDiff_wrapper(f, 4)
+        ff = trust_region_problem(f, zeros(4))
         J = Diagonal(ones(4))
-        for x ∈ (randn(4), zeros(Int, 4), range(1//5, 3//7; length = 4))
-            @test ff(x) == (residual = Float64.(x .+ r), Jacobian = J)
+        for x in (randn(4), [1//2, 1//3, 1//4, 1//5])
+            @test @inferred(evaluate_∂F(ff, x)) ≃ ∂FX(Float64.(x), Float64.(x .+ r), J)
         end
     end
 
     @testset "handle infeasible" begin
-        ff = ForwardDiff_wrapper(x -> all(x .> 0) ? x : x .+ NaN, 4)
-        @test !all(isfinite, ff(-ones(4)).residual)
-        @test ff(ones(4)) == (residual = ones(4), Jacobian = Diagonal(ones(4)))
+        f2(x) = all(x .> 0) ? x : x .+ NaN
+        ff2 = trust_region_problem(f2, zeros(4))
+        @test !all(isfinite, @inferred(evaluate_∂F(ff2, .-ones(4))).residual)
+        @test @inferred(evaluate_∂F(ff2, ones(4))) ≃ ∂FX(ones(4), ones(4), Diagonal(ones(4)))
     end
 end
 
@@ -142,10 +148,12 @@ end
     function _debug(args)
         _iterations = args.iterations
     end
-    ff = ForwardDiff_wrapper(x -> Diagonal(ones(2)) * x, 2)
-    @test repr(ff) isa AbstractString
-    res = trust_region_solver(ff, ones(2); debug = _debug)
+    ff = trust_region_problem(x -> Diagonal(ones(2)) * x, ones(2))
+    @test occursin("trust region problem", repr(MIME("text/plain"), ff))
+    res = trust_region_solver(ff; debug = _debug)
     @test _iterations == res.iterations
-    @test repr(res) isa AbstractString
-    @test repr(TrustRegionResult(1, [1.0], nothing, 1.0, false, 99)) isa AbstractString
+    @test occursin("converged", repr(MIME("text/plain"), res))
+    @test occursin("didn't converge",
+                   repr(MIME("text/plain"),
+                        TrustRegionResult(1.0, [1.0], [1.0], [1.0;;], 1.0, false, 99)))
 end

@@ -2,7 +2,7 @@
 
 ![lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)
 [![build](https://github.com/tpapp/TrustRegionMethods.jl/workflows/CI/badge.svg)](https://github.com/tpapp/TrustRegionMethods.jl/actions?query=workflow%3ACI)
-[![codecov.io](http://codecov.io/github/tpapp/TrustRegionMethods.jl/coverage.svg?branch=master)](http://codecov.io/github/tpapp/TrustRegionMethods.jl?branch=master)
+[![codecov](https://codecov.io/github/tpapp/TrustRegionMethods.jl/graph/badge.svg?token=Tds39dbcz1)](https://codecov.io/github/tpapp/TrustRegionMethods.jl)
 
 Experimental Julia package for trust region methods, with an emphasis on
 

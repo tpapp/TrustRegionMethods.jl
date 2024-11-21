@@ -70,7 +70,7 @@ Caller guarantees non-zero gradient.
 function cauchy_point(Δ::Real, model::LocalModel)
     (; g, B) = model
     g_norm = norm(g, 2)
-    q = g' * B * g
+    q = ellipsoidal_norm(g, B)
     @argcheck g_norm > 0
     τ = if q ≤ 0              # practically 0 (semi-definite form) but allow for float error
         one(q)

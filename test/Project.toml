@@ -1,5 +1,7 @@
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 NonlinearTestProblems = "84d880b8-0062-4738-ba75-b6cb1662e554"

@@ -84,7 +84,7 @@ Evaluate the function and the Jacobian at `x`, returning a [`∂FX`](@ref) objec
 function evaluate_∂F(F::TrustRegionProblem{TF,TX}, x::T) where {TF,TX,T}
     (; f, AD_backend, AD_prep) = F
     if !(T ≡ TX)
-        x = convert(TX, x)
+        x = convert(TX, x)::TX
     end
     residual, Jacobian = value_and_jacobian(f, AD_prep, AD_backend, x)
     if all(isfinite, residual)

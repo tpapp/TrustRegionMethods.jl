@@ -3,6 +3,7 @@
 ![lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)
 [![build](https://github.com/tpapp/TrustRegionMethods.jl/workflows/CI/badge.svg)](https://github.com/tpapp/TrustRegionMethods.jl/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/github/tpapp/TrustRegionMethods.jl/graph/badge.svg?token=Tds39dbcz1)](https://codecov.io/github/tpapp/TrustRegionMethods.jl)
+[![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 A simple, and somewhat experimental Julia package for trust region methods, with an emphasis on
 

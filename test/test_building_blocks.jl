@@ -122,6 +122,15 @@ end
                                                       singular1)...)
 end
 
+@testset "calculate_objective_reduction" begin
+    N = 10
+    a = randn(N)
+    b = randn(N)
+    J = randn(N, N)             # NOTE: unused in calculation, just like coordinates
+    Δ = TrustRegionMethods.calculate_objective_reduction(∂FX(a, a, J), ∂FX(b, b, J))
+    @test sum(abs2, a) - sum(abs2, b) ≈ Δ
+end
+
 # define for comparison in the test below
 function (≃)(a::∂FX, b::∂FX)
     a.x == b.x && a.residual == b.residual && a.Jacobian == b.Jacobian

@@ -117,22 +117,7 @@ $(SIGNATURES)
 
 Reduction of model objective at `p`, compared to the origin.
 """
-function model_reduction(model::LocalModel, p)
+function calculate_model_reduction(model::LocalModel, p)
     (; g, B) = model
     - (dot(p, g) + ellipsoidal_norm(p, B) / 2)
-end
-
-"""
-$(SIGNATURES)
-
-Ratio between predicted (using `model`, at `p`) and actual reduction (using `p_objective`,
-the minimand at `p`).
-
-Will return an arbitrary negative number for infeasible coordinates.
-"""
-function reduction_ratio(model, p, p_objective)
-    Δ_model = model_reduction(model, p)
-    Δ_objective = model.f - p_objective
-    ρ = Δ_objective / Δ_model
-    isfinite(ρ) ? ρ : -one(ρ)
 end

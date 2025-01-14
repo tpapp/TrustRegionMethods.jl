@@ -5,6 +5,8 @@
 export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRegionResult,
     SolverStoppingCriterion
 
+public StopCause
+
 ####
 #### problem definition API
 ####
@@ -93,6 +95,15 @@ function evaluate_∂F(F::TrustRegionProblem{TF,TX}, x::T) where {TF,TX,T}
     ∂FX(x, residual, Jacobian)
 end
 
+"""
+$(SIGNATURES)
+
+The objective of the problem formulated as minimization.
+"""
+function calculate_objective_reduction(a::∂FX, b::∂FX)
+    # NOTE: equivalent to elementwise a^2 - b^2, implemented for numerical stability
+    mapreduce((a, b) -> (a + b) * (a - b), +, a.residual, b.residual)
+end
 
 ####
 #### trust region steps
@@ -138,8 +149,12 @@ function trust_region_step(parameters::TrustRegionParameters, local_method,
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = ∂fx.x .+ p
     ∂fx′ = evaluate_∂F(F, x′)
-    # NOTE: non-finite residuals are handled in reduction_ratio as ρ < 0
-    ρ = reduction_ratio(model, p, residual_minimand(∂fx′.residual))
+    model_reduction = calculate_model_reduction(model, p)
+    objective_reduction = calculate_objective_reduction(∂fx, ∂fx′)
+    ρ = objective_reduction / model_reduction
+    if !isfinite(ρ)
+        ρ = -one(ρ)             # handle non-finite residuals
+    end
     Δ′ =
         if ρ < 0.25
             p_norm / 4
@@ -148,39 +163,111 @@ function trust_region_step(parameters::TrustRegionParameters, local_method,
         else
             Δ
         end
-    if ρ ≥ η
-        Δ′, ∂fx′                # reasonable reduction, use new position
-    else
-        Δ′, ∂fx                 # very small reduction, try again from original
-    end
+    take_step = ρ ≥ η           # use new position
+    (; Δ = Δ′, ∂fx′ = take_step ? ∂fx′ : ∂fx,
+     on_boundary, step = p, step_norm = p_norm, step_taken = take_step,
+     objective_reduction, model_reduction)
+end
+
+"""
+$(SIGNATURES)
+
+Diagnostics for a trust region step.
+"""
+function trust_region_step_diagnostics(∂fx::∂FX, ∂fx′::∂FX)
+    (absolute_residual_change = mapreduce(absolute_difference, max,
+                                            ∂fx.residual, ∂fx′.residual),
+     relative_residual_change = mapreduce(relative_difference, max,
+                                             ∂fx.residual, ∂fx′.residual),
+     absolute_coordinate_change = mapreduce(absolute_difference, max,
+                                            ∂fx.x, ∂fx′.x),
+     relative_coordinate_change = mapreduce(relative_difference, max,
+                                            ∂fx.x, ∂fx′.x),
+     residual_norm = norm(∂fx′.residual, 2))
 end
 
 struct SolverStoppingCriterion{T <: Real}
-    residual_norm_tolerance::T
+    residual_norm::T
+    absolute_coordinate_change::T
+    relative_coordinate_change::T
+    absolute_residual_change::T
+    relative_residual_change::T
     @doc """
     $(SIGNATURES)
 
-    Stopping criterion for trust region colver.
+    Stopping criterion for trust region colver. Fields are compared to the values
+    obtained from the latest step, and if **any** of the latter is smaller, the solver
+    stops.
 
-    Arguments:
-
-    - `residual_norm_tolerance`: convergence is declared when the norm of the residual is
-      below this value
+    Norms are Euclidean, changes in vectors are the maximum of elementwise absolute or
+    relative difference.
     """
-    function SolverStoppingCriterion(residual_norm_tolerance::T) where {T}
-        @argcheck residual_norm_tolerance > 0
-        new{T}(residual_norm_tolerance)
+    function SolverStoppingCriterion(; residual_norm::Real = √eps(),
+                                     absolute_coordinate_change::Real = √eps(),
+                                     relative_coordinate_change::Real = √eps(),
+                                     absolute_residual_change::Real = √eps(),
+                                     relative_residual_change::Real = √eps())
+        (residual_norm,
+         absolute_coordinate_change,
+         relative_coordinate_change,
+         absolute_residual_change,
+         relative_residual_change) = promote(residual_norm,
+                                             absolute_coordinate_change,
+                                             relative_coordinate_change,
+                                             absolute_residual_change,
+                                             relative_residual_change)
+        @argcheck residual_norm ≥ 0
+        @argcheck absolute_coordinate_change ≥ 0
+        @argcheck relative_coordinate_change ≥ 0
+        @argcheck absolute_residual_change ≥ 0
+        @argcheck relative_residual_change ≥ 0
+        new{typeof(residual_norm)}(residual_norm,
+               absolute_coordinate_change, relative_coordinate_change,
+               absolute_residual_change, relative_residual_change)
     end
 end
 
-function SolverStoppingCriterion(; residual_norm_tolerance = √eps())
-    SolverStoppingCriterion(residual_norm_tolerance)
+"""
+Reason for stopping the solver. See the docstrings of values for each.
+"""
+@enumx StopCause begin
+    "residual norm below the specified tolerance"
+    ResidualNorm
+    "largest absolute residual change below specified tolerance"
+    AbsoluteResidualChange
+    "largest relative residual change below specified tolerance"
+    RelativeResidualChange
+    "largest absolute coordinate change below specified tolerance"
+    AbsoluteCoordinateChange
+    "largest relative coordinate change below specified tolerance"
+    RelativeCoordinateChange
+    "reached maximum iterations"
+    MaximumIterations
 end
 
-function check_stopping_criterion(nsc::SolverStoppingCriterion, fx)
-    r_norm = norm(fx.residual, 2)
-    converged = r_norm ≤ nsc.residual_norm_tolerance
-    (converged = converged , residual_norm = r_norm)
+"""
+$(SIGNATURES)
+
+Check whether we need to stop, and either return an applicable [`StopCause`](@ref), or
+`nothing` if there is no reason to stop.
+"""
+function check_stopping_criterion(nsc::SolverStoppingCriterion, diagnostics)
+    if diagnostics.residual_norm ≤ nsc.residual_norm
+        return StopCause.ResidualNorm
+    end
+    if diagnostics.absolute_residual_change ≤ nsc.absolute_residual_change
+        return StopCause.AbsoluteResidualChange
+    end
+    if diagnostics.relative_residual_change ≤ nsc.relative_residual_change
+        return StopCause.RelativeResidualChange
+    end
+    if diagnostics.absolute_coordinate_change ≤ nsc.absolute_coordinate_change
+        return StopCause.AbsoluteCoordinateChange
+    end
+    if diagnostics.relative_coordinate_change ≤ nsc.relative_coordinate_change
+        return StopCause.RelativeCoordinateChange
+    end
+    nothing
 end
 
 """
@@ -193,7 +280,7 @@ the API and can be accessed by the user.
 
 $(FIELDS)
 """
-struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ}
+struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ,TD}
     "The final trust region radius."
     Δ::T
     "The last value (the root only when converged)."
@@ -202,10 +289,10 @@ struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ}
     residual::TR
     "`∂f/∂x at `x`."
     Jacobian::TJ
-    "The Euclidean norm of the residual at `x`."
-    residual_norm::T
-    "A boolean indicating convergence."
-    converged::Bool
+    "Diagnostics for the last step."
+    last_step_diagnostics::TD
+    "Reason for stopping."
+    stop_cause::StopCause.T
     "Number of iterations (≈ number of function evaluations)."
     iterations::Int
 end
@@ -213,25 +300,33 @@ end
 function TrustRegionResult(; Δ::T1, x::AbstractVector{T2},
                            residual::AbstractVector{T3},
                            Jacobian::AbstractMatrix{T4},
-                           residual_norm::T5, converged,
-                           iterations) where {T1 <: Real, T2 <: Real, T3 <: Real,
-                                              T4 <: Real, T5 <: Real}
-    T = promote_type(T1, T2, T3, T4, T5)
-    TrustRegionResult(T(Δ), T.(x), T.(residual), T.(Jacobian), T(residual_norm),
-                      converged, iterations)
+                           last_step_diagnostics, stop_cause,
+                           iterations) where {T1 <: Real, T2 <: Real, T3 <: Real, T4 <: Real}
+    T = promote_type(T1, T2, T3, T4)
+    TrustRegionResult(T(Δ), T.(x), T.(residual), T.(Jacobian), last_step_diagnostics,
+                      stop_cause, iterations)
+end
+
+function Base.getproperty(trr::TrustRegionResult, key::Symbol)
+    if key ≡ :converged
+        trr.stop_cause ≠ StopCause.MaximumIterations
+    else
+        getfield(trr, key)
+    end
 end
 
 function Base.show(io::IO, ::MIME"text/plain", trr::TrustRegionResult)
-    (; Δ, x, residual, Jacobian, residual_norm, converged, iterations) = trr
+    (; Δ, x, residual, Jacobian, last_step_diagnostics, stop_cause, iterations) = trr
     _sig(x) = round(x; sigdigits = 3)
     print(io, "Nonlinear solver using trust region method ")
-    if converged
-        printstyled(io, "converged"; color = :green)
+    if stop_cause == StopCause.MaximumIterations
+        printstyled(io, "reached maximum iterations"; color = :red)
     else
-        printstyled(io, "didn't converge"; color = :red)
+        printstyled(io, "stopped with ", stop_cause; color = :green)
     end
     println(io, " after $(iterations) steps")
     print(io, "  with ")
+    (; residual_norm) = last_step_diagnostics
     printstyled(io, "‖x‖₂ = $(_sig(residual_norm)), Δ = $(_sig(Δ))\n"; color = :blue)
     println(io, "  x = ", _sig.(x))
     print(io, "  r = ", _sig.(residual))
@@ -303,19 +398,31 @@ function trust_region_solver(F::TrustRegionProblem;
                              debug = nothing)
     @argcheck Δ > 0
     ∂fx = evaluate_∂F(F, F.initial_x)
-    iterations = 1
+    iterations = 0
     while true
-        Δ, ∂fx = trust_region_step(parameters, local_method, F, Δ, ∂fx)
-        (; x, residual, Jacobian) = ∂fx
         iterations += 1
-        (; converged, residual_norm) = check_stopping_criterion(stopping_criterion, ∂fx)
-        if debug ≢ nothing
-            debug((; iterations, Δ, x, residual, Jacobian, converged, residual_norm))
+        (; Δ, ∂fx′, on_boundary, step, step_taken, step,
+         step_norm) = trust_region_step(parameters, local_method, F, Δ, ∂fx)
+        step_diagnostics = trust_region_step_diagnostics(∂fx, ∂fx′)
+        if step_taken
+            ∂fx = ∂fx′
+            stop_cause = check_stopping_criterion(stopping_criterion, step_diagnostics)
+        else
+            stop_cause = nothing
         end
-        reached_max_iter = iterations ≥ maximum_iterations
-        if converged || reached_max_iter
-            return TrustRegionResult(; Δ, x, residual, Jacobian, residual_norm,
-                                     converged, iterations)
+        (; x, residual, Jacobian) = ∂fx
+        if debug ≢ nothing
+            debug(merge((; iterations, Δ, x, residual, Jacobian,
+                         step, on_boundary, step_taken, step_norm),
+                        step_diagnostics))
+        end
+        if iterations ≥ maximum_iterations
+            stop_cause = something(stop_cause, StopCause.MaximumIterations)
+        end
+        if stop_cause ≢ nothing
+            return TrustRegionResult(; Δ, x, residual, Jacobian,
+                                     last_step_diagnostics = step_diagnostics,
+                                     stop_cause, iterations)
         end
     end
 end

@@ -16,7 +16,7 @@
             display(result)
             @test result.x ≈ x0 atol = √eps() * n
             @test norm(result.residual, 2) ≈ 0 atol = √eps()
-            @test norm(result.residual, 2) == result.residual_norm
+            @test norm(result.residual, 2) == result.last_step_diagnostics.residual_norm
             @test result.Jacobian == J
             @test result.converged
             ∑iter += result.iterations
@@ -42,22 +42,22 @@ end
         end
         F2 = trust_region_problem(f2, [3.0])
         result = trust_region_solver(F2)
-        @test !result.converged
+        @test result.converged
         @test result.x ≈ [1.0]
     end
 
     @testset "jump over narrow infeasible region" begin
-        history = Bool[]
+        history = []
         function f3(x)
             is_feasible = abs(x[1] - 2) ≥ 0.1 # first step takes us here
-            push!(history, is_feasible)
+            push!(history, (is_feasible, x[1]))
             is_feasible ? x .^ 3  : x .+ NaN
         end
         F3 = trust_region_problem(f3, [3.0])
-        result = trust_region_solver(F3; Δ = 5)
+        result = trust_region_solver(F3; Δ = 5, debug = x -> println(x.x, x.step))
         @test result.converged
         @test result.x ≈ [0.0] atol = 0.03
-        @test any(!, history)   # check that infeasible region was visited
+        @test any(!first, history)   # check that infeasible region was visited
     end
 end
 

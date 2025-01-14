@@ -6,6 +6,7 @@ module TrustRegionMethods
 using ArgCheck: @argcheck
 using DifferentiationInterface: prepare_jacobian, value_and_jacobian, AutoForwardDiff
 using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF, DocStringExtensions
+using EnumX: @enumx
 import ForwardDiff
 using KrylovKit: eigsolve
 using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling

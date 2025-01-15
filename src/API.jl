@@ -5,7 +5,7 @@
 export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRegionResult,
     SolverStoppingCriterion
 
-public StopCause
+Compat.@public StopCause
 
 ####
 #### problem definition API

@@ -2,7 +2,7 @@
 ##### utilities
 #####
 
-Compat.@public relative_difference, absolute_difference
+@public relative_difference, absolute_difference
 
 """
 $(SIGNATURES)

@@ -4,7 +4,7 @@ $(DocStringExtensions.README)
 module TrustRegionMethods
 
 using ArgCheck: @argcheck
-import Compat
+using Compat: @compat
 using DifferentiationInterface: prepare_jacobian, value_and_jacobian, AutoForwardDiff
 using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF, DocStringExtensions
 using EnumX: @enumx

@@ -23,9 +23,11 @@ end
     @test res.stop_cause ≠ TrustRegionMethods.StopCause.MaximumIterations
     @test res.trace == res.iterations
     @test occursin("stopped with", repr(MIME("text/plain"), res))
-    @test occursin("maximum iterations",
-                   repr(MIME("text/plain"),
-                        TrustRegionResult(1.0, [1.0], [1.0], [1.0;;], (; residual_norm = 1.0),
-                                          TrustRegionMethods.StopCause.MaximumIterations, 99,
-                                          nothing)))
+end
+
+@testset "non-convergence" begin
+    ff = trust_region_problem(x -> exp.(x) , ones(2))
+    res = trust_region_solver(ff; maximum_iterations = 10)
+    @test !res.converged
+    @test occursin("reached maximum iterations", repr(MIME("text/plain"), res))
 end

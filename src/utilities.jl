@@ -2,6 +2,8 @@
 ##### utilities
 #####
 
+@compat public relative_difference, absolute_difference
+
 """
 $(SIGNATURES)
 
@@ -30,3 +32,26 @@ Ellipsoidal norm ``\\| x \\|_B = x'Bx``.
 ellipsoidal_norm(x, ::UniformScaling) = norm(x, 2)
 
 ellipsoidal_norm(x, B) = dot(x, B, x)
+
+"""
+$(SIGNATURES)
+
+Relative (absolute) difference of `a` and `b`.
+
+Equivalent to ``|a-b|/max(|a|,|b|)``, except for yielding `0` if `a == b == 0`.
+"""
+function relative_difference(a, b)
+    d = abs(a - b)
+    if iszero(d)
+        d / one(d)              # for type stability
+    else
+        d / max(abs(a), abs(b))
+    end
+end
+
+"""
+$(SIGNATURES)
+
+Absolute difference `abs(a - b)`.
+"""
+absolute_difference(a, b) = abs(a - b)

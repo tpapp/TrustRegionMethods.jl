@@ -9,7 +9,7 @@ A simple, and somewhat experimental Julia package for trust region methods, with
 
 1. *Clean functional style*: no preallocated buffers, resulting in less complicated code.
 
-2. *A simple modular interface*: iterate stepwise, or use a simple wrapper.
+2. *A detailed tracer API:*: trace the solver by printing or accumulating steps and/or various diagnostics.
 
 3. *AD via [DifferentiationInterface](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/)*:
    harness the power of Julia's AD ecosystem in a simple way.

@@ -54,7 +54,7 @@ end
             is_feasible ? x .^ 3  : x .+ NaN
         end
         F3 = trust_region_problem(f3, [3.0])
-        result = trust_region_solver(F3; Δ = 5, debug = x -> println(x.x, x.step))
+        result = trust_region_solver(F3; initial_Δ = 5)
         @test result.converged
         @test result.x ≈ [0.0] atol = 0.03
         @test any(!first, history)   # check that infeasible region was visited

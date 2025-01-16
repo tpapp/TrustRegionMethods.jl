@@ -5,7 +5,8 @@
 export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRegionResult,
     SolverStoppingCriterion
 
-@compat public StopCause
+@compat public StopCause, NoTracer, TrustRegionState, trust_region_step,
+    trust_region_step_diagnostics
 
 ####
 #### problem definition API
@@ -132,19 +133,53 @@ TrustRegionParameters(η, Δ̄) = TrustRegionParameters(promote(η, Δ̄)...)
 TrustRegionParameters(; η = 0.125, Δ̄ = Inf) = TrustRegionParameters(η, Δ̄)
 
 """
+Current state of the trust region algorithm. Initialize with
+[`trust_region_initialize`](@ref).
+"""
+struct TrustRegionState{TF,TD}
+    "the position, value, and Jacobian"
+    ∂fx::TF
+    "trust region radius"
+    Δ::TD
+end
+
+"""
+$(SIGNATURES)
+
+Initialize the trust region solver state, returning a `TrustRegionState`.
+"""
+function trust_region_initialize(F::TrustRegionProblem, initial_Δ::Real)
+    @argcheck initial_Δ > 0
+    TrustRegionState(evaluate_∂F(F, F.initial_x), float(initial_Δ))
+end
+
+const API_FOR_TRACER = """
+!!! NOTE
+This function is not meant to be called by the user except for debugging purposes, the
+values are documented because they are provided to the tracer in
+[`trust_region_solver`](@ref).
+"""
+
+"""
 $(SIGNATURES)
 
 Take a trust region step using `local_method`.
 
-`f` is the function that returns the residual and the Jacobian (see
-[`trust_region_solver`](@ref)).
+Returns a new state and the step information, which is a NamedTuple that consists of
 
-`Δ` is the trust region radius, `x` is the position, `∂fx = evaluate_∂F(x)`. Caller
-ensures that the latter is feasible.
+- `on_boundary::Bool` for indicating whether the step is on the boundary
+- `step::AbstractVector{<:Real}`, a vector for the step taken
+- `step_norm::Real`, the Euclidean norm of `step`,
+- `objective_reduction::Real`, the reduction in the sum of squared residuals
+- `model_reduction::Real`, the corresponding predicted reduction
+- `step_taken::Bool`.
+
+$(API_FOR_TRACER)
 """
 function trust_region_step(parameters::TrustRegionParameters, local_method,
-                           F::TrustRegionProblem, Δ, ∂fx::∂FX)
+                           F::TrustRegionProblem, state)
     (; η, Δ̄) = parameters
+    (; ∂fx, Δ) = state
     model = local_residual_model(∂fx.residual, ∂fx.Jacobian)
     p, p_norm, on_boundary = solve_model(local_method, Δ, model)
     x′ = ∂fx.x .+ p
@@ -163,22 +198,37 @@ function trust_region_step(parameters::TrustRegionParameters, local_method,
         else
             Δ
         end
-    take_step = ρ ≥ η           # use new position
-    (; Δ = Δ′, ∂fx′ = take_step ? ∂fx′ : ∂fx,
-     on_boundary, step = p, step_norm = p_norm, step_taken = take_step,
-     objective_reduction, model_reduction)
+    step_taken = ρ ≥ η           # use new position
+    state′ = TrustRegionState(step_taken ? ∂fx′ : ∂fx, Δ′)
+    step_information = (; on_boundary, step = p, step_norm = p_norm, objective_reduction,
+                        model_reduction, step_taken)
+    state′, step_information
 end
 
 """
 $(SIGNATURES)
 
 Diagnostics for a trust region step.
+
+Returns a `NamedTuple` of
+
+- `absolute_residual_change` and `relative_residual_change`, the largest absolute and
+  relative residual changes,
+
+- `absolute_coordinate_change` and `relative_coordinate_change`, the largest absolute
+  and relative coordinate changes.
+
+- `residual_norm`, the norm of the function residual.
+
+Relative changes are calculated using [`relative_difference`](@ref).
+
+$(API_FOR_TRACER)
 """
 function trust_region_step_diagnostics(∂fx::∂FX, ∂fx′::∂FX)
     (absolute_residual_change = mapreduce(absolute_difference, max,
-                                            ∂fx.residual, ∂fx′.residual),
+                                          ∂fx.residual, ∂fx′.residual),
      relative_residual_change = mapreduce(relative_difference, max,
-                                             ∂fx.residual, ∂fx′.residual),
+                                          ∂fx.residual, ∂fx′.residual),
      absolute_coordinate_change = mapreduce(absolute_difference, max,
                                             ∂fx.x, ∂fx′.x),
      relative_coordinate_change = mapreduce(relative_difference, max,
@@ -280,7 +330,7 @@ the API and can be accessed by the user.
 
 $(FIELDS)
 """
-struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ,TD}
+struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ,TD,TT}
     "The final trust region radius."
     Δ::T
     "The last value (the root only when converged)."
@@ -295,16 +345,18 @@ struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ,TD}
     stop_cause::StopCause.T
     "Number of iterations (≈ number of function evaluations)."
     iterations::Int
+    "Information accumulated by tracer."
+    trace::TT
 end
 
 function TrustRegionResult(; Δ::T1, x::AbstractVector{T2},
                            residual::AbstractVector{T3},
                            Jacobian::AbstractMatrix{T4},
                            last_step_diagnostics, stop_cause,
-                           iterations) where {T1 <: Real, T2 <: Real, T3 <: Real, T4 <: Real}
+                           iterations, trace) where {T1 <: Real, T2 <: Real, T3 <: Real, T4 <: Real}
     T = promote_type(T1, T2, T3, T4)
     TrustRegionResult(T(Δ), T.(x), T.(residual), T.(Jacobian), last_step_diagnostics,
-                      stop_cause, iterations)
+                      stop_cause, iterations, trace)
 end
 
 function Base.getproperty(trr::TrustRegionResult, key::Symbol)
@@ -335,6 +387,15 @@ end
 """
 $(SIGNATURES)
 
+A placeholder for no tracing. Not exported, but part of the API.
+"""
+struct NoTracer end
+
+(::NoTracer)(trace::Nothing, information) = trace
+
+"""
+$(SIGNATURES)
+
 Solve `f ≈ 0` using trust region methods, starting from `x`. Should be provided with a problem
 wrapper, see [`trust_region_problem`](@ref).
 
@@ -353,8 +414,7 @@ Returns a [`TrustRegionResult`](@ref) object.
 
 - `Δ = 1.0`, the initial trust region radius
 
-- `debug = nothing`: when `≢ nothing`, a function that will be called with an object that
-  has properties `iterations, Δ, x, residual, Jacobian, converged, residual_norm`.
+- `tracer = NoTracer()`: see below.
 
 # Example
 
@@ -387,6 +447,22 @@ julia> result.x
 2-element Vector{Float64}:
  -0.11979242665753244
   0.5034484917613987
+
+# Tracing
+
+The keyword argument `tracer` should be a callable conforming to `tracer(trace, information)`.
+
+It will be called with `trace = nothing` first, and after that the first argument will
+be the value returned by previous calls. The final value is included in the result.
+
+`information` is a NamedTuple `(; state, state′, step_information, step_diagnostics)`, where
+1. the first two are [`TrustRegionState`](@ref)s,
+2. `step_information` is the second value returned by [`trust_region_step`](@ref),
+3. `step_diagnostics` is the value returned by [`trust_region_step_diagnostics`](@ref)
+
+For example, the following stylized
+
+FIXME docs
 ```
 """
 function trust_region_solver(F::TrustRegionProblem;
@@ -394,35 +470,31 @@ function trust_region_solver(F::TrustRegionProblem;
                              local_method = Dogleg(),
                              stopping_criterion = SolverStoppingCriterion(),
                              maximum_iterations = 500,
-                             Δ = 1.0,
-                             debug = nothing)
-    @argcheck Δ > 0
-    ∂fx = evaluate_∂F(F, F.initial_x)
+                             initial_Δ = 1.0,
+                             tracer = NoTracer())
+    state = trust_region_initialize(F, initial_Δ)
     iterations = 0
+    trace = nothing
     while true
         iterations += 1
-        (; Δ, ∂fx′, on_boundary, step, step_taken, step,
-         step_norm) = trust_region_step(parameters, local_method, F, Δ, ∂fx)
-        step_diagnostics = trust_region_step_diagnostics(∂fx, ∂fx′)
-        if step_taken
-            ∂fx = ∂fx′
+        state′, step_information = trust_region_step(parameters, local_method, F, state)
+        step_diagnostics = trust_region_step_diagnostics(state.∂fx, state′.∂fx)
+        if step_information.step_taken
             stop_cause = check_stopping_criterion(stopping_criterion, step_diagnostics)
         else
             stop_cause = nothing
         end
-        (; x, residual, Jacobian) = ∂fx
-        if debug ≢ nothing
-            debug(merge((; iterations, Δ, x, residual, Jacobian,
-                         step, on_boundary, step_taken, step_norm),
-                        step_diagnostics))
-        end
+        trace = tracer(trace, (; state, state′, step_information, step_diagnostics))
         if iterations ≥ maximum_iterations
             stop_cause = something(stop_cause, StopCause.MaximumIterations)
         end
+        state = state′
+        (; ∂fx, Δ) = state
+        (; x, residual, Jacobian) = ∂fx
         if stop_cause ≢ nothing
             return TrustRegionResult(; Δ, x, residual, Jacobian,
                                      last_step_diagnostics = step_diagnostics,
-                                     stop_cause, iterations)
+                                     stop_cause, iterations, trace)
         end
     end
 end

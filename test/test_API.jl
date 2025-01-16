@@ -9,19 +9,23 @@
     @test_throws ArgumentError SolverStoppingCriterion(; relative_residual_change = -0.1)
 end
 
-@testset "printing and debug" begin       # just test that printing is defined
-    _iterations = -1
-    function _debug(args)
-        _iterations = args.iterations
+@testset "printing and tracing" begin       # just test that printing is defined
+    function _tracer(trace, args)
+        if trace ≡ nothing
+            1
+        else
+            trace + 1
+        end
     end
     ff = trust_region_problem(x -> Diagonal(ones(2)) * x, ones(2))
     @test occursin("trust region problem", repr(MIME("text/plain"), ff))
-    res = @inferred trust_region_solver(ff; debug = _debug)
+    res = @inferred trust_region_solver(ff; tracer = _tracer)
     @test res.stop_cause ≠ TrustRegionMethods.StopCause.MaximumIterations
-    @test _iterations == res.iterations
+    @test res.trace == res.iterations
     @test occursin("stopped with", repr(MIME("text/plain"), res))
     @test occursin("maximum iterations",
                    repr(MIME("text/plain"),
                         TrustRegionResult(1.0, [1.0], [1.0], [1.0;;], (; residual_norm = 1.0),
-                                          TrustRegionMethods.StopCause.MaximumIterations, 99)))
+                                          TrustRegionMethods.StopCause.MaximumIterations, 99,
+                                          nothing)))
 end

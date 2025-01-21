@@ -6,7 +6,7 @@ export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRe
     SolverStoppingCriterion
 
 @compat public StopCause, NoTracer, TrustRegionState, trust_region_step,
-    trust_region_step_diagnostics
+    trust_region_step_diagnostics, evaluate_∂F
 
 ####
 #### problem definition API
@@ -83,6 +83,8 @@ end
 $(SIGNATURES)
 
 Evaluate the function and the Jacobian at `x`, returning a [`∂FX`](@ref) object.
+
+Public, but not exported. Mainly useful for debugging and benchmarking.
 """
 function evaluate_∂F(F::TrustRegionProblem{TF,TX}, x::T) where {TF,TX,T}
     (; f, AD_backend, AD_prep) = F

@@ -10,7 +10,8 @@ using DocStringExtensions: FIELDS, FUNCTIONNAME, SIGNATURES, TYPEDEF, DocStringE
 using EnumX: @enumx
 import ForwardDiff
 using KrylovKit: eigsolve
-using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling
+using LinearAlgebra: diag, Diagonal, dot, I, issuccess, lu, norm, Symmetric, UniformScaling,
+    normalize!
 using SymmetricProducts: SELF
 
 include("utilities.jl")

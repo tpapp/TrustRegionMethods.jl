@@ -53,6 +53,7 @@ function dogleg_implementation(Δ, model, pU, pU_norm)
         pC, pC_norm, on_boundary
     else
         D = pU .- pC
+        normalize!(D, 2)
         τ = dogleg_boundary(Δ, D, pC, pC_norm)
         pC .+ D .* τ, Δ, true
     end

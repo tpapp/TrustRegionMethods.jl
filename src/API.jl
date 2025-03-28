@@ -6,7 +6,7 @@ export trust_region_problem, trust_region_solver, TrustRegionParameters, TrustRe
     SolverStoppingCriterion
 
 @compat public StopCause, NoTracer, TrustRegionState, trust_region_step,
-    trust_region_step_diagnostics
+    trust_region_step_diagnostics, evaluate_∂F
 
 ####
 #### problem definition API
@@ -59,6 +59,7 @@ function trust_region_problem(f, initial_x; AD_backend = AutoForwardDiff())
     if !(eltype(initial_x) <: AbstractFloat)
         initial_x = float.(initial_x)
     end
+    @argcheck all(isfinite, initial_x)
     AD_prep = prepare_jacobian(f, AD_backend, initial_x)
     TrustRegionProblem(f, initial_x, AD_backend, AD_prep)
 end
@@ -83,15 +84,21 @@ end
 $(SIGNATURES)
 
 Evaluate the function and the Jacobian at `x`, returning a [`∂FX`](@ref) object.
+
+Public, but not exported. Mainly useful for debugging and benchmarking.
 """
 function evaluate_∂F(F::TrustRegionProblem{TF,TX}, x::T) where {TF,TX,T}
     (; f, AD_backend, AD_prep) = F
+    @argcheck all(isfinite, x)
     if !(T ≡ TX)
         x = convert(TX, x)::TX
     end
     residual, Jacobian = value_and_jacobian(f, AD_prep, AD_backend, x)
     if all(isfinite, residual)
-        @argcheck all(isfinite, Jacobian) "Infinite Jacobian for finite residual."
+        if !all(isfinite, Jacobian)
+            @error "Infinite Jacobian for finite residual." x residual Jacobian
+            error("Infinite Jacobian for finite residual.")
+        end
     end
     ∂FX(x, residual, Jacobian)
 end

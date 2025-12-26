@@ -20,7 +20,7 @@ A container for a struct region problem. Create with [`trust_region_problem`](@r
 Internal, not part of the API.
 """
 struct TrustRegionProblem{TF,TX,TA,TP}
-    "The function we are solving for ``f(x) ≈ 0`"
+    "The residuals we are solving for ``f(x) ≈ 0``"
     f::TF
     "The initial `x`, also used to create `AD_prep`"
     initial_x::TX

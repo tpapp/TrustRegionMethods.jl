@@ -175,11 +175,19 @@ Take a trust region step using `local_method`.
 Returns a new state and the step information, which is a NamedTuple that consists of
 
 - `on_boundary::Bool` for indicating whether the step is on the boundary
+
 - `step::AbstractVector{<:Real}`, a vector for the step taken
+
 - `step_norm::Real`, the Euclidean norm of `step`,
+
 - `objective_reduction::Real`, the reduction in the sum of squared residuals
+
 - `model_reduction::Real`, the corresponding predicted reduction
-- `step_taken::Bool`.
+
+- `step_taken::Bool`, whether a step was taken
+
+- `tiny_values`, a flag indicating that `objective_reduction` may be unreliable because
+  of numerical noise
 
 $(API_FOR_TRACER)
 """
@@ -194,21 +202,20 @@ function trust_region_step(parameters::TrustRegionParameters, local_method,
     model_reduction = calculate_model_reduction(model, p)
     objective_reduction = calculate_objective_reduction(∂fx, ∂fx′)
     ρ = objective_reduction / model_reduction
-    if !isfinite(ρ)
-        ρ = -one(ρ)             # handle non-finite residuals
-    end
+    relative_reduction = abs(objective_reduction) / abs(value_at_origin(model))
+    tiny_values = relative_reduction ≤ 8 * eps(one(relative_reduction))
     Δ′ =
-        if ρ < 0.25
+        if !tiny_values && (ρ < 0.25 || !isfinite(ρ))
             p_norm / 4
-        elseif ρ > 0.75 && on_boundary
+        elseif !tiny_values && ρ > 0.75 && on_boundary
             min(2 * Δ, Δ̄)
         else
             Δ
         end
-    step_taken = ρ ≥ η           # use new position
+    step_taken = tiny_values || ρ ≥ η           # use new position
     state′ = TrustRegionState(step_taken ? ∂fx′ : ∂fx, Δ′)
     step_information = (; on_boundary, step = p, step_norm = p_norm, objective_reduction,
-                        model_reduction, step_taken)
+                        model_reduction, step_taken, tiny_values)
     state′, step_information
 end
 

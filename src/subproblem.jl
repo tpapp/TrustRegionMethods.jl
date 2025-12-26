@@ -31,6 +31,13 @@ end
 """
 $(SIGNATURES)
 
+Evaluate the model at the origin (``0`3`).
+"""
+value_at_origin(model::LocalModel) = model.f
+
+"""
+$(SIGNATURES)
+
 Convert a residual from a system of equations (in a rootfinding problem) to an objective for
 minimization.
 """

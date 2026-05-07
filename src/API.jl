@@ -293,6 +293,8 @@ end
 
 """
 Reason for stopping the solver. See the docstrings of values for each.
+
+$(EXPORTS)
 """
 @enumx StopCause begin
     "residual norm below the specified tolerance"
@@ -355,7 +357,7 @@ struct TrustRegionResult{T<:Real,TX<:AbstractVector{T},TR,TJ,TD,TT}
     Jacobian::TJ
     "Diagnostics for the last step."
     last_step_diagnostics::TD
-    "Reason for stopping."
+    "Reason for stopping, one of [`TrustRegionMethods.StopCause`](@ref)."
     stop_cause::StopCause.T
     "Number of iterations (≈ number of function evaluations)."
     iterations::Int
